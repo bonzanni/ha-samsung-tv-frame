@@ -11,6 +11,8 @@ ENTITY = "switch.samsung_frame_tv_art_mode_switch"
 
 
 async def _setup(hass, mock_device):
+    mock_device.art_ready = True
+    mock_device.art_generation = 1
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_HOST: "1.2.3.4", CONF_MAC: "02:00:00:00:00:01", CONF_TOKEN: "t"},
