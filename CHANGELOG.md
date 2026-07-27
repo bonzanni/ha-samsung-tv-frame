@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0
+
+- **BREAKING:** raise the minimum Home Assistant version from 2026.1.0 to
+  2026.3.0. Installations on 2026.1 or 2026.2 must update Home Assistant before
+  taking this release.
+- Ship brand images inside the integration (`custom_components/samsung_tv_frame/brand/`)
+  so the integration shows its own icon instead of a placeholder. Home Assistant
+  2026.3.0 serves local brand images through the brands proxy and prefers them
+  over the CDN; the previous route, a pull request against
+  `home-assistant/brands` under `custom_integrations/`, is no longer accepted.
+- Icons carry no Samsung wordmark or logo. See
+  `docs/superpowers/specs/2026-07-28-brand-icons-design.md`.
+
 ## 0.8.0
 
 - **BREAKING:** rename integration domain `samsungtv_frame` → `samsung_tv_frame`

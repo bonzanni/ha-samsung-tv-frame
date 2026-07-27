@@ -44,6 +44,3 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # The brands check requires the home-assistant/brands PR to be
-          # merged; skipped until then.
-          ignore: brands
