@@ -2,6 +2,26 @@
 
 Accurate OFF / WATCHING / ART-MODE state for Samsung Frame TVs, plus power and basic controls.
 
+> [!NOTE]
+> This is an unofficial community integration. It is not affiliated with,
+> authorised by, or endorsed by Samsung. "Samsung" and "The Frame" are
+> trademarks of Samsung Electronics Co., Ltd., used here only to identify the
+> hardware this integration talks to.
+
+## Installation
+
+Requires Home Assistant **2026.3.0** or later.
+
+**HACS** — add `https://github.com/bonzanni/ha-samsung-tv-frame` as a custom
+repository (category: Integration), install it, then restart Home Assistant.
+
+**Manual** — copy `custom_components/samsung_tv_frame/` into your Home Assistant
+`config/custom_components/` directory and restart Home Assistant.
+
+Then add the integration from **Settings → Devices & services → Add integration**.
+To remove it, delete the config entry, then delete the
+`custom_components/samsung_tv_frame` directory and restart.
+
 ## Entities
 - `media_player.samsung_frame_tv` — power on (Wake-on-LAN) / off (3 s hold), absolute volume +
   real mute state (via the TV's UPnP service) plus step keys, play/pause/stop, channel up/down,
