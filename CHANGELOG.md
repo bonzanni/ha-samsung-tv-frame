@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.1
+
+- **FIX:** the integration failed to load on Home Assistant 2026.8 and later,
+  leaving the config entry in `not_loaded` with no entities and no error in the
+  log. `async-upnp-client` was pinned to `==0.46.2`, but Home Assistant core
+  constrains it to `==0.47.1` in `package_constraints.txt` and installs custom
+  integration requirements under that constraint. Pip resolution failed
+  (`ResolutionImpossible`), so setup aborted before the module was ever
+  imported.
+- Drop `async-upnp-client` from `requirements` and declare `ssdp` in
+  `dependencies` instead. The core `ssdp` integration already provides
+  `async_upnp_client` at whatever version core ships, so the library is
+  guaranteed present and the version coupling is gone for good. A custom
+  integration cannot pin a core-managed package: core bumps it on its own
+  schedule and any fixed pin eventually becomes unsatisfiable.
+- Declaring `ssdp` as a dependency also matches the `ssdp` discovery matchers
+  this manifest already declares, mirroring core's own `samsungtv` integration.
+- Add `tests/test_manifest.py`, which fails if any manifest requirement pins a
+  version that Home Assistant's `package_constraints.txt` disallows. The
+  original pin was correct when written and only became unsatisfiable when core
+  bumped the library, so nothing in the suite could have caught it; this check
+  turns that silent production failure into a red build instead.
+- Unpin `async-upnp-client` in `requirements_test.txt` (`>=0.46.2`) so the test
+  environment stops reproducing the same conflict as Home Assistant advances.
+
 ## 0.9.0
 
 - **BREAKING:** raise the minimum Home Assistant version from 2026.1.0 to
