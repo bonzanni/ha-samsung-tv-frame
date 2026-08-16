@@ -466,7 +466,29 @@ Note two surveys asserted 'standby has never been observed on this model' — th
 
 `reachable` exists only inside FrameData and the zero-I/O diagnostics snapshot (coordinator.py:96-124). No entity, attribute or device trigger exposes it. Entity availability tracks only last_update_success, which an unreachable TV does NOT clear because the poll succeeds and reports OFF (entity.py:52-67 has no `available` override). A Wi-Fi/AP outage, a DHCP reassignment, a Tizen crash, a filtered port, or a move to Ethernet all publish a positively-asserted 'off'. The dhcp/ssdp matchers that could repair an address change have no config-flow handler, so recovery is manual.
 
-### H3. `set_favourite` will very likely time out and retire the art session on every call
+### H3. ~~`set_favourite` will very likely time out~~ — FALSIFIED 2026-08-16
+
+> **This finding is wrong. Probed against the live TV and withdrawn.**
+>
+> Valid calls complete in **~0.15 s** and leave the art session healthy. A
+> deliberately bad `content_id` returns a *correlated* error —
+> `` ResponseError: `change_favorite` request failed with error number -7 `` —
+> which proves the TV both received the request and answered it on the
+> correlated path. The firmware does emit `favorite_changed`.
+>
+> The expectation is inherited from `samsungtvws` (`art/art.py:366`) and is
+> correct for this model. **No change was made.** Had the code-level reasoning
+> below been trusted, a working call path would have been broken.
+>
+> New protocol knowledge from the probe: **error code `-7` = bad/unknown
+> `content_id`**, which answers part of probe P2-14.
+>
+> Kept below for the record — it is a good example of a finding that is
+> code-verified, internally consistent, and still wrong about the device. This
+> is precisely why `AGENTS.md` requires live probing before a protocol contract
+> is finalized.
+
+**Original (incorrect) finding:**
 
 **Symptom.** Calling set_favourite hangs 20 s, then errors; the art websocket drops and art_mode/current_art/all six optional entities go stale or unavailable until the session is rebuilt. No favourite state is exposed anywhere, so nothing else would ever reveal the problem.
 
@@ -478,7 +500,13 @@ Code-verified, not inferred. frame_art.py:502-511 waits for sub-event `favorite_
 
 device.py:591-612 routes to the legacy setter only when `_slideshow_dialect is LEGACY`; for UNKNOWN (fresh art generation, before the first reconcile) or UNSUPPORTED it falls through to the modern-first `FrameArt.set_slideshow`. On this firmware `set_auto_rotation_status` is a CONFIRMED silent timeout (hotfix design:34) — and it is a non-probe write, so it burns 20 s, closes the websocket and retires the generation. This is reachable any time a user calls the service after a reconnect but before the first reconcile. Additionally, the only slideshow write ever live-verified is the identity restore (off -> off); a real duration/shuffle/category write is unproven.
 
-### H5. `nav` — a live-confirmed third art-app state on THIS model — is silently reported as WATCHING
+### H5. `nav` reported as WATCHING — CONFIRMED, now FIXED
+
+> **Fixed.** `nav` now maps to *indeterminate* on both the poll and push paths,
+> so the coordinator holds its last stable reading instead of publishing
+> WATCHING and firing `started_watching`. A real art→watching transition is
+> unaffected, pinned by its own regression test.
+
 
 **Symptom.** Opening the art menu on the TV publishes tv_mode 'watching' and fires the started_watching device trigger. Lights/scenes bound to art->watching transitions run because someone pressed a menu button. Same defect class as the ~7 s shutdown blip the project already fought.
 
@@ -498,7 +526,7 @@ The operator's own live probe (2026-07-02) recorded that get_artmode can transie
 
 - **PowerState missing or unrecognized freezes tv_mode forever with no warning** — tv_mode is frozen at whatever it last was, indefinitely, with every entity available and asserting it, and nothing in the logs. The worst unrepresentable state in the model.
 
-- **The manifest advertises SSDP and DHCP discovery that cannot complete** — Discovery notifications that dead-end, plus the absence of the one mechanism that could repair a changed IP address — which is exactly the failure the reachability model cannot otherwise survive.
+- ~~**The manifest advertises SSDP and DHCP discovery that cannot complete**~~ — **PARTLY FALSIFIED, then FIXED.** Discovery did *not* dead-end: Home Assistant's base `ConfigFlow` supplies `async_step_dhcp`/`async_step_ssdp` that fall through to `async_step_user`, which is exactly how the existing entry acquired `source: dhcp`. What the base steps never did was *reconcile a sighting against a configured entry*, so there was no way to repair a changed IP address — the real and serious half of the finding, given `reachable` is a single-signal oracle over the REST port. Both steps are now implemented: DHCP matches on the MAC the entry is keyed on, SSDP resolves identity over REST, and both update the stored host in place.
 
 ### Low
 
