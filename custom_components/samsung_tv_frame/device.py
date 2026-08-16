@@ -623,6 +623,16 @@ class FrameDevice:
         """
 
         async def _set() -> None:
+            # A dialect learned here can still be carried across a reconnect:
+            # the send waits on FrameArt's operation lock, which an in-flight
+            # request holds for up to its full deadline, and recovery can
+            # advance the generation in that window. Harmless, and left
+            # deliberately unclosed: the dialect is a property of the TV's
+            # firmware, not of the socket, so a newer generation of the same
+            # TV answers the same command. Closing it properly means checking
+            # the generation inside that lock, immediately before the send —
+            # a guarantee this layer cannot make, and a check here would only
+            # narrow the window while reading like it had closed it.
             self._reset_optional_dialects_for_generation(
                 self.art_generation
             )
@@ -638,8 +648,16 @@ class FrameDevice:
                     duration, shuffle, category_id
                 )
                 return
+            if self._slideshow_dialect is _SlideshowDialect.UNSUPPORTED:
+                raise UnsupportedArtCommandError(
+                    "This TV does not support slideshow control"
+                )
+            # Still UNKNOWN: the probes never got a verdict, which means the
+            # Art session went away underneath them. Saying "unsupported"
+            # here would blame the TV for a transport problem.
             raise UnsupportedArtCommandError(
-                "This TV answered no slideshow command"
+                "The Art connection did not stay up long enough to learn "
+                "which slideshow command this TV answers"
             )
 
         await self._async_art_mutation(_set)

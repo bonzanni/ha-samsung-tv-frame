@@ -2528,12 +2528,33 @@ async def test_slideshow_write_refuses_when_no_dialect_answers(
     device._art.set_auto_rotation = AsyncMock()
     device._art.set_legacy_slideshow = AsyncMock()
 
-    with pytest.raises(UnsupportedArtCommandError):
+    with pytest.raises(UnsupportedArtCommandError, match="does not support"):
         await device.async_set_slideshow(60, True, "MY-C0002")
 
     device._art.set_auto_rotation.assert_not_awaited()
     device._art.set_legacy_slideshow.assert_not_awaited()
     device._art_session.async_connection_failed.assert_not_awaited()
+
+
+async def test_slideshow_write_does_not_blame_the_tv_for_a_lost_session(
+    device,
+):
+    """A session that dies while probing is not evidence about the TV."""
+    device._art.get_auto_rotation_status = AsyncMock(
+        side_effect=ArtProbeTimeout()
+    )
+    device._art.get_legacy_slideshow_status = AsyncMock(
+        side_effect=ArtProbeTimeout()
+    )
+    device._art.set_auto_rotation = AsyncMock()
+    device._art.set_legacy_slideshow = AsyncMock()
+
+    with pytest.raises(UnsupportedArtCommandError, match="did not stay up"):
+        await device.async_set_slideshow(60, True, "MY-C0002")
+
+    assert device._slideshow_dialect.value == "unknown"
+    device._art.set_auto_rotation.assert_not_awaited()
+    device._art.set_legacy_slideshow.assert_not_awaited()
 
 
 async def test_slideshow_write_does_not_reuse_previous_generation_dialect(

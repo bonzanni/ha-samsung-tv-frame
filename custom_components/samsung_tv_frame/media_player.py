@@ -302,10 +302,9 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
                 duration_minutes, shuffle, category_id
             )
         except UnsupportedArtCommandError as err:
-            raise HomeAssistantError(
-                "This TV answered no slideshow command, so the slideshow "
-                "cannot be configured from Home Assistant"
-            ) from err
+            # Carries its own reason: the TV refused the capability, or the
+            # Art session went away before one could be established.
+            raise HomeAssistantError(str(err)) from err
         except Exception as err:
             raise HomeAssistantError("Failed to configure the slideshow") from err
         await self.coordinator.async_request_art_reconcile()

@@ -1,6 +1,7 @@
 # Lost-contact signal design
 
-**Date:** 2026-08-16 · **Status:** proposed (unreviewed) · **Target release:** v0.10.0
+**Date:** 2026-08-16 · **Status:** reviewed (Sol + Terra, round 1: both SHIP WITH
+FIXES; both findings folded in below) · **Target release:** v0.10.0
 · **Core:** HA 2026.8.1, Python 3.14 · **Device:** QE65LS03B, `api_version` 4.3.4.0
 
 ## Objective
@@ -64,6 +65,30 @@ automation can be written on *lost contact* at all.
   enabled by default. Both verified present in the installed HA 2026.8.1.
 - `is_on` returns `coordinator.data.reachable` — "the last poll got a `device`
   object from port 8001", and nothing more.
+
+#### `reachable` must become a poll-owned fact (review finding, Terra S1)
+
+As shipped, `reachable` is **not** poll-owned: the art push path overwrites it
+with a hardcoded `True` (`coordinator.py:526`), so an unsolicited art event
+would flip the sensor to "connected" without any REST heartbeat having answered.
+Fix: drop `reachable=True` from that `replace(...)` call and let the field carry
+the last polled value. `derive_tv_mode(True, ...)` on that path keeps its literal
+`True` argument — it is a separate statement ("the TV just talked to us"), and
+the mode derivation is unchanged. `FrameData.reachable` has exactly one consumer
+today (the diagnostics snapshot, `coordinator.py:105`), so nothing else moves.
+
+The alternative — defining the sensor as *"in contact by any channel"*, which an
+art push would legitimately satisfy — is **rejected**, for two reasons:
+
+1. **It would flap.** The art session is not torn down when a poll reports
+   unreachable (`art_session.py:126-133` records and returns), so a TV whose
+   REST port has wedged while its art socket lives would push an event every
+   slideshow rotation — 5 minutes apart on this device — flipping the sensor on,
+   then off again at the next failing poll, and firing the very triggers this
+   design adds, indefinitely.
+2. **It would hide the thing worth seeing.** The sensor exists to expose the
+   state of the oracle that drives `unreachable → OFF`. Smoothing that oracle
+   with evidence from a different channel defeats the purpose.
 - **No debounce.** `OFF_DEBOUNCE_COUNT` exists to stabilise *mode*; applying it
   here would hide exactly the short outages this entity exists to reveal.
   Automations that want persistence use `for:`, which every trigger already
@@ -83,8 +108,31 @@ automation can be written on *lost contact* at all.
 
 `device_trigger.py` today maps trigger type → `to` state against the single
 `tv_mode` entity, found by a `_tv_mode` unique-id suffix. Generalise the table to
-(entity suffix, to-state) pairs so triggers can attach to the connection sensor
-as well. `for:` support is already generic (`async_get_trigger_capabilities`).
+(entity suffix, from-state, to-state) triples so triggers can attach to the
+connection sensor as well. `for:` support is already generic
+(`async_get_trigger_capabilities`).
+
+#### The two new triggers are deliberately asymmetric (review finding, Sol S2)
+
+A `to`-only state trigger also fires on `unavailable → <state>`. Sol's scenario:
+a poll that blows `POLL_DEADLINE` makes every entity unavailable, the next
+successful poll restores `on`, and a `to: "on"` trigger announces
+`regained_contact` although contact was never lost. Sol's fix was to give *both*
+new triggers explicit opposite `from` states. Only half of that is right:
+
+| sequence | meaning | `to`-only | with `from` |
+|---|---|---|---|
+| `on → off` | contact lost | fires ✓ | fires ✓ |
+| `on → unavailable → on` | coordinator hiccup, TV fine | **false `regained`** | silent ✓ |
+| `on → unavailable → off` | coordinator failed, then TV really gone | fires ✓ | **misses a real loss** |
+| `off → on` | contact restored | fires ✓ | fires ✓ |
+
+So `regained_contact` takes `from: "off"`, and `lost_contact` stays `to: "off"`
+with no `from` — which also matches the existing `turned_off` trigger's
+convention, so the three shipped triggers keep behaving exactly as they do
+today. A missed "recovered" notification is a smaller harm than a fabricated
+one; a missed "lost" notification is the larger harm, so that direction stays
+permissive.
 
 ### 3. Nothing else changes
 
@@ -147,9 +195,13 @@ already exposes.
    debounce (contact lost on poll 1, while `tv_mode` still holds last-stable).
 2. It stays `available` while the TV is unreachable and the poll succeeds.
 3. It goes `unavailable` when the coordinator poll itself fails.
-4. Device triggers `lost_contact` / `regained_contact` fire on the transitions
-   and honour `for:`.
-5. Pinning: `tv_mode`, `media_player` and `binary_sensor.art_mode` behave
+4. **An art push event does not flip it to connected** — the regression for
+   Terra's S1, and the one test that fails against today's code for a reason
+   nothing else covers.
+5. Device triggers `lost_contact` / `regained_contact` fire on the transitions
+   and honour `for:`; `regained_contact` does **not** fire on
+   `unavailable → on`, while `lost_contact` does fire on `unavailable → off`.
+6. Pinning: `tv_mode`, `media_player` and `binary_sensor.art_mode` behave
    exactly as before across an unreachable poll — this change is additive.
 
 ## Rollout
