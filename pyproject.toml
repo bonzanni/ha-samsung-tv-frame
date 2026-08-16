@@ -3,8 +3,9 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
-# CI runs Python 3.13; keep the lint target aligned with it.
-target-version = "py313"
+# The oldest Home Assistant this integration supports (2026.3.0, per hacs.json)
+# already requires Python >= 3.14.2, so 3.14 is the true minimum for our source.
+target-version = "py314"
 
 [tool.ruff.lint]
 ignore = [
