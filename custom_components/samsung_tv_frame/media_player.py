@@ -15,7 +15,8 @@ from homeassistant.components.media_player import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import config_validation as cv, entity_platform
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
@@ -201,14 +202,14 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
     async def async_set_volume_level(self, volume: float) -> None:
         try:
             await self.coordinator.device.async_set_volume(volume)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set volume on the TV") from err
         await self.coordinator.async_request_refresh()
 
     async def async_mute_volume(self, mute: bool) -> None:
         try:
             await self.coordinator.device.async_set_mute(mute)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set mute on the TV") from err
         await self.coordinator.async_request_refresh()
 
@@ -238,7 +239,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
         app_type = "DEEP_LINK" if app.get("app_type") == 2 else "NATIVE_LAUNCH"
         try:
             await self.coordinator.device.async_launch_app(app["appId"], app_type)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to launch {source}") from err
 
     async def async_send_key_service(self, key: str) -> None:
@@ -247,14 +248,14 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
     async def async_set_art_mode_service(self, enabled: bool) -> None:
         try:
             await self.coordinator.device.async_set_artmode(enabled)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set art mode on the TV") from err
         await self.coordinator.async_request_refresh()
 
     async def async_select_art_service(self, content_id: str, show: bool) -> None:
         try:
             await self.coordinator.device.async_select_art(content_id, show)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to select artwork {content_id}") from err
         await self.coordinator.async_request_refresh()
 
@@ -275,7 +276,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
             content_id = await self.coordinator.device.async_upload_art(
                 data, file_type, matte
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to upload {path} to the TV") from err
         if show:
             await self.async_select_art_service(content_id, True)
@@ -283,7 +284,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
     async def async_delete_art_service(self, content_id: str) -> None:
         try:
             await self.coordinator.device.async_delete_art(content_id)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to delete artwork {content_id}") from err
         await self.coordinator.async_request_refresh()
 
@@ -294,7 +295,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
             await self.coordinator.device.async_set_slideshow(
                 duration_minutes, shuffle, category_id
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to configure the slideshow") from err
         await self.coordinator.async_request_art_reconcile()
 
@@ -304,7 +305,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
         content_id = self._resolve_content_id(content_id)
         try:
             await self.coordinator.device.async_change_matte(content_id, matte_id)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(
                 f"Failed to change matte on {content_id}"
             ) from err
@@ -318,7 +319,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
             await self.coordinator.device.async_set_photo_filter(
                 content_id, filter_id
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(
                 f"Failed to set photo filter on {content_id}"
             ) from err
@@ -329,7 +330,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
         content_id = self._resolve_content_id(content_id)
         try:
             await self.coordinator.device.async_set_favourite(content_id, favourite)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(
                 f"Failed to change favourite on {content_id}"
             ) from err
@@ -357,7 +358,7 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
             await self.coordinator.device.async_launch_app(
                 app_id, app_type, meta_tag
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to launch {media_id}") from err
 
     def _resolve_content_id(self, content_id: str | None) -> str:
@@ -371,5 +372,5 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
     async def _async_send_key(self, key: str) -> None:
         try:
             await self.coordinator.device.async_send_key(key)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to send {key} to the TV") from err

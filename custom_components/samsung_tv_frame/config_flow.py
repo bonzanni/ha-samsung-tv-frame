@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 import voluptuous as vol
@@ -58,10 +59,8 @@ def _force_abort_temporary_socket(
         transport = getattr(connection, "transport", None)
         abort = getattr(transport, "abort", None)
         if callable(abort):
-            try:
+            with contextlib.suppress(Exception):
                 abort()
-            except Exception:
-                pass
     if getattr(client, "connection", None) is connection:
         client.connection = None
 
@@ -70,10 +69,11 @@ async def _async_cleanup_temporary_art(art: FrameArt) -> None:
     """Bound Art cleanup and force-abort the socket captured before close."""
     connection = art.connection
     try:
-        async with asyncio.timeout(ART_CLOSE_DEADLINE):
-            await art.close()
-    except BaseException:
-        pass
+        # Cleanup is best-effort: a half-dead TV socket can raise anything here,
+        # and the caller must still reach the force-abort below.
+        with contextlib.suppress(BaseException):
+            async with asyncio.timeout(ART_CLOSE_DEADLINE):
+                await art.close()
     finally:
         _force_abort_temporary_socket(art, connection)
 
@@ -82,10 +82,11 @@ async def _async_cleanup_temporary_remote(remote: FrameRemote) -> None:
     """Terminally stop the temporary remote without exposing cleanup errors."""
     connection = remote.connection
     try:
-        async with asyncio.timeout(REMOTE_CLOSE_DEADLINE):
-            await remote.async_stop()
-    except BaseException:
-        pass
+        # Same contract as the Art cleanup above: never let a teardown error
+        # escape, the force-abort in the finally block is what must always run.
+        with contextlib.suppress(BaseException):
+            async with asyncio.timeout(REMOTE_CLOSE_DEADLINE):
+                await remote.async_stop()
     finally:
         _force_abort_temporary_socket(
             remote, connection, abort_detached=False
@@ -119,7 +120,7 @@ async def validate_and_pair(hass, host: str) -> dict[str, Any]:
     )
     try:
         info = (await rest.rest_device_info()) or {}
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         raise CannotConnect from err
     device = info.get("device", {})
     if device.get("FrameTVSupport") != "true":
@@ -151,7 +152,7 @@ async def validate_and_pair(hass, host: str) -> dict[str, Any]:
             await art.open()
     except RemotePairingRequired as err:
         raise CannotConnect from err
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         raise CannotConnect from err
     finally:
         await _async_cleanup_pairing_clients(art, remote)

@@ -72,5 +72,5 @@ class FrameRemote(FrameEntity, RemoteEntity):
                         await device.async_hold_key(key, hold)
                     else:
                         await device.async_send_key(key)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(f"Failed to send {keys} to the TV") from err

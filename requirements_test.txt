@@ -1,4 +1,11 @@
-pytest-homeassistant-custom-component
+# Pinned to the Home Assistant line running in production (2026.8.1). An
+# unpinned harness silently tested against an older core than we ship to, which
+# is how the async-upnp-client constraint conflict fixed in 0.9.1 reached
+# production green. Bump this deliberately, together with the production core.
+pytest-homeassistant-custom-component==0.13.355
 samsungtvws[async,encrypted]==3.0.5
 wakeonlan==3.3.0
+# Not installed by homeassistant itself (core lists integration requirements in
+# package_constraints.txt, not install_requires), so the tests need it here.
+# Deliberately unpinned: tests/test_manifest.py owns the version-conflict check.
 async-upnp-client>=0.46.2

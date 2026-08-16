@@ -6,7 +6,11 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.samsung_tv_frame.const import (
-    CONF_HOST, CONF_MAC, CONF_TOKEN, DEFAULT_APP_MAP, DOMAIN,
+    CONF_HOST,
+    CONF_MAC,
+    CONF_TOKEN,
+    DEFAULT_APP_MAP,
+    DOMAIN,
 )
 
 ENTITY = "media_player.samsung_frame_tv"

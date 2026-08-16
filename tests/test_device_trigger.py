@@ -5,7 +5,10 @@ from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.samsung_tv_frame.const import (
-    CONF_HOST, CONF_MAC, CONF_TOKEN, DOMAIN,
+    CONF_HOST,
+    CONF_MAC,
+    CONF_TOKEN,
+    DOMAIN,
 )
 from custom_components.samsung_tv_frame.device_trigger import async_get_triggers
 
@@ -48,7 +51,7 @@ async def test_get_triggers_empty_for_unknown_device(hass, mock_device):
     await _setup(hass, mock_device)
     device_registry = dr.async_get(hass)
     other = device_registry.async_get_or_create(
-        config_entry_id=list(hass.config_entries.async_entry_ids())[0],
+        config_entry_id=next(iter(hass.config_entries.async_entry_ids())),
         identifiers={("other_domain", "xyz")},
     )
     assert await async_get_triggers(hass, other.id) == []

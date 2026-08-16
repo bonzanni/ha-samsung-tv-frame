@@ -4,20 +4,22 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from samsungtvws.exceptions import ConnectionFailure
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from samsungtvws.exceptions import ConnectionFailure
 
 from custom_components.samsung_tv_frame import (
     async_setup_entry,
     async_unload_entry,
 )
 from custom_components.samsung_tv_frame.const import (
-    CONF_HOST, CONF_MAC, CONF_TOKEN, DOMAIN, PLATFORMS,
+    CONF_HOST,
+    CONF_MAC,
+    CONF_TOKEN,
+    DOMAIN,
+    PLATFORMS,
 )
 from custom_components.samsung_tv_frame.coordinator import FrameCoordinator
 from custom_components.samsung_tv_frame.device import FrameDevice
-
 
 _MISSING_TOKEN = object()
 
@@ -322,12 +324,11 @@ async def test_setup_start_failure_clears_callback_and_bounds_cleanup(
             hass.config_entries,
             "async_forward_entry_setups",
             AsyncMock(),
-        ),
+        ),pytest.raises(RuntimeError, match="session start failed") as raised
     ):
-        with pytest.raises(RuntimeError, match="session start failed") as raised:
-            await asyncio.wait_for(
-                async_setup_entry(hass, entry), timeout=0.2
-            )
+        await asyncio.wait_for(
+            async_setup_entry(hass, entry), timeout=0.2
+        )
 
     assert raised.value is start_error
     assert cleanup_started.is_set()
@@ -425,12 +426,11 @@ async def test_setup_first_refresh_failure_clears_callback_and_bounds_cleanup(
             hass.config_entries,
             "async_forward_entry_setups",
             AsyncMock(),
-        ),
+        ),pytest.raises(RuntimeError, match="first refresh failed") as raised
     ):
-        with pytest.raises(RuntimeError, match="first refresh failed") as raised:
-            await asyncio.wait_for(
-                async_setup_entry(hass, entry), timeout=0.2
-            )
+        await asyncio.wait_for(
+            async_setup_entry(hass, entry), timeout=0.2
+        )
 
     assert raised.value is refresh_error
     mock_device.async_start_art_session.assert_awaited_once()
@@ -495,14 +495,13 @@ async def test_setup_platform_forward_failure_cleans_device_session(
             hass.config_entries,
             "async_forward_entry_setups",
             AsyncMock(side_effect=_failed_forward),
-        ),
+        ),pytest.raises(
+        RuntimeError, match="platform forwarding failed"
+    ) as raised
     ):
-        with pytest.raises(
-            RuntimeError, match="platform forwarding failed"
-        ) as raised:
-            await asyncio.wait_for(
-                async_setup_entry(hass, entry), timeout=0.2
-            )
+        await asyncio.wait_for(
+            async_setup_entry(hass, entry), timeout=0.2
+        )
 
     assert raised.value is forward_error
     mock_device.async_start_art_session.assert_awaited_once()

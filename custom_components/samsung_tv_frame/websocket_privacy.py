@@ -11,7 +11,7 @@ from samsungtvws.exceptions import ResponseError
 class _QuietWebSocketLogger(logging.Logger):
     """A connection-specific logger that can never emit handshake details."""
 
-    def isEnabledFor(self, level: int) -> bool:  # noqa: N802 - logging API
+    def isEnabledFor(self, level: int) -> bool:
         return False
 
     def handle(self, record: logging.LogRecord) -> None:

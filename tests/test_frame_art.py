@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import gc
 import json
 import logging
@@ -178,11 +179,10 @@ async def test_request_does_not_open_when_receiver_is_not_ready():
     art = make_art()
     start = AsyncMock()
 
-    with patch.object(art, "start_listening", start):
-        with pytest.raises(
-            ConnectionFailure, match="^Art session is not ready$"
-        ):
-            await art.request("get_artmode_status")
+    with patch.object(art, "start_listening", start), pytest.raises(
+        ConnectionFailure, match="^Art session is not ready$"
+    ):
+        await art.request("get_artmode_status")
 
     start.assert_not_awaited()
 
@@ -1033,10 +1033,8 @@ async def test_upload_d2d_completion_rejects_other_client_id(
         if upload is not None:
             if not upload.done():
                 upload.cancel()
-            try:
+            with contextlib.suppress(BaseException):
                 await upload
-            except BaseException:
-                pass
         await art.close()
 
     assert writer.closed
@@ -1166,10 +1164,8 @@ async def test_close_cancels_blocked_upload_and_cleans_writer():
         finally:
             writer.drain_release.set()
             if not upload.done():
-                try:
+                with contextlib.suppress(Exception, asyncio.CancelledError):
                     await upload
-                except (Exception, asyncio.CancelledError):
-                    pass
 
     assert elapsed < 0.05
     assert writer.closed
@@ -1725,9 +1721,8 @@ async def test_open_closes_local_socket_on_failed_handshake(event):
     with patch(
         "custom_components.samsung_tv_frame.frame_art.connect",
         AsyncMock(return_value=ws),
-    ):
-        with pytest.raises((UnauthorizedError, ConnectionFailure)):
-            await art.open()
+    ), pytest.raises((UnauthorizedError, ConnectionFailure)):
+        await art.open()
     assert ws.closed
     assert art.connection is None
 
@@ -2487,11 +2482,9 @@ async def test_request_connection_loss_before_send_removes_registration():
     with (
         patch.object(art, "start_listening", AsyncMock()),
         patch.object(art, "is_alive", return_value=True),
+        pytest.raises(ConnectionFailure, match="Art connection closed"),
     ):
-        with pytest.raises(ConnectionFailure, match="Art connection closed"):
-            await art.request(
-                "get_artmode_status", expected_sub_event="artmode_status"
-            )
+        await art.request("get_artmode_status", expected_sub_event="artmode_status")
     assert not art._pending
     assert art._uuidless_pending is None
 
