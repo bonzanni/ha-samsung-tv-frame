@@ -81,6 +81,8 @@ class ArtSession:
         self._terminal = False
         self._failure_count = 0
         self._host_failure_count = 0
+        self._host_unavailable = False
+        self._dormancy_warned = False
         self._next_retry_at = 0.0
         self._last_reachable: bool | None = None
         self._generation = 0
@@ -225,16 +227,67 @@ class ArtSession:
                 LOGGER.warning("Art session state callback failed")
 
     def _reset_failures(self) -> None:
+        """Clear the retry counters. Not evidence about the Art host.
+
+        Called on start and on a REST reachable edge as well as on success, so
+        it must not touch the wedge signal: a TV reappearing on the network has
+        proved nothing about its Art service, and the wedge is measured to
+        survive a power-off and a Wake-on-LAN wake.
+        """
         self._failure_count = 0
         self._host_failure_count = 0
+
+    def _note_connected(self) -> None:
+        """Record a connection that actually succeeded.
+
+        The only thing that disproves a wedge, and the only thing that re-arms
+        the announcement for the next one.
+        """
+        self._reset_failures()
+        self._host_unavailable = False
+        self._dormancy_warned = False
+
+    @property
+    def host_unavailable(self) -> bool:
+        """Whether the TV's art channel answered without an internal host.
+
+        This is the one art failure with no software remedy: the socket is
+        accepted, the handshake is answered, and the TV reports no art host —
+        measured to survive a power-off, a full network exit and a
+        Wake-on-LAN wake, and to clear only on a mains power cycle. It is
+        deliberately distinct from a TV that is merely off or unreachable,
+        which fails with an ordinary connection error and must not be
+        reported as a wedged art service.
+
+        Sticky until a connection actually succeeds. `_host_failure_count`
+        cannot carry this signal: it is reset by any ordinary failure so that
+        the dormancy escalation counts *consecutive* hostless answers, so a
+        single transient error between two hostless ones would otherwise
+        retract the fault and flap the repair the owner is meant to act on.
+        """
+        return self._host_unavailable
 
     def _record_failure(self, error: Exception) -> None:
         self._failure_count += 1
         now = self._clock()
         if isinstance(error, ArtHostUnavailable):
             self._host_failure_count += 1
+            self._host_unavailable = True
             if self._host_failure_count >= 3:
                 self._next_retry_at = now + ART_DORMANT_SECONDS
+                if not self._dormancy_warned:
+                    # Said once per wedge, not once per retry: dormant retries
+                    # re-enter CONNECTING, so guarding on the state alone would
+                    # re-announce every dormancy period, forever.
+                    self._dormancy_warned = True
+                    LOGGER.warning(
+                        "The TV's Art service is accepting connections but "
+                        "reporting no internal Art host, so Art state and "
+                        "settings are unavailable. Retrying every %d minutes. "
+                        "The only remedy measured to work is a power cycle: "
+                        "disconnect the TV from mains for 30 seconds",
+                        int(ART_DORMANT_SECONDS // 60),
+                    )
                 self._set_state(ArtSessionState.DORMANT)
                 return
             delay = ART_HOST_RETRY_DELAYS[
@@ -345,7 +398,7 @@ class ArtSession:
             return False
 
         self._generation += 1
-        self._reset_failures()
+        self._note_connected()
         self._next_retry_at = 0.0
         self._set_state(ArtSessionState.READY)
         return True

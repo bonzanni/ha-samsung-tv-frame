@@ -74,3 +74,58 @@ async def test_connection_sensor_is_diagnostic(hass, mock_device):
     entry = registry.async_get("binary_sensor.samsung_frame_tv_connection")
     assert entry is not None
     assert entry.entity_category is EntityCategory.DIAGNOSTIC
+
+
+async def test_art_service_sensor_reports_a_wedged_art_host(hass, mock_device):
+    """The wedge needs an entity, because only the owner can clear it.
+
+    A power cycle is the only measured remedy, so the state has to be
+    observable and automatable rather than merely logged.
+    """
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    mock_device.art_host_unavailable = True
+    await _setup(hass, mock_device)
+
+    state = hass.states.get("binary_sensor.samsung_frame_tv_art_service")
+    assert state is not None
+    assert state.state == "on"
+    assert state.attributes["device_class"] == "problem"
+
+
+async def test_art_service_sensor_is_off_when_the_art_host_is_present(
+    hass, mock_device
+):
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    mock_device.art_host_unavailable = False
+    await _setup(hass, mock_device)
+
+    state = hass.states.get("binary_sensor.samsung_frame_tv_art_service")
+    assert state is not None
+    assert state.state == "off"
+
+
+async def test_art_service_sensor_is_off_when_the_tv_is_unreachable(
+    hass, mock_device
+):
+    """A TV we cannot see is not evidence of a wedged art service.
+
+    Reporting a problem here would fire the owner's power-cycle automation
+    every time the TV is simply switched off.
+    """
+    mock_device.async_device_info.return_value = None
+    mock_device.art_host_unavailable = True
+    await _setup(hass, mock_device)
+
+    state = hass.states.get("binary_sensor.samsung_frame_tv_art_service")
+    assert state is not None
+    assert state.state == "off"
+
+
+async def test_art_service_sensor_is_diagnostic(hass, mock_device):
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    await _setup(hass, mock_device)
+
+    registry = er.async_get(hass)
+    entry = registry.async_get("binary_sensor.samsung_frame_tv_art_service")
+    assert entry is not None
+    assert entry.entity_category is EntityCategory.DIAGNOSTIC

@@ -53,6 +53,7 @@ def mock_device() -> MagicMock:
     device.art_ready = False
     device.art_generation = 0
     device.art_session_state = ArtSessionState.STOPPED
+    device.art_host_unavailable = False
     device.observe_art_power = MagicMock()
     device.set_art_session_state_callback = MagicMock()
     device.set_remote_token_callback = MagicMock()

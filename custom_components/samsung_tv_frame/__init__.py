@@ -78,6 +78,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: FrameConfigEntry) -> boo
                     "Could not clear %s callback after setup failure",
                     name,
                 )
+        # A repair raised by the first refresh would otherwise outlive the
+        # setup that owns it: nothing polls the TV after a failed setup, so
+        # nobody would ever clear it.
+        try:
+            coordinator.clear_art_service_repair()
+        except BaseException:  # noqa: BLE001 - preserve the setup error
+            LOGGER.warning(
+                "Could not clear the Art service repair after setup failure"
+            )
         await _async_stop_after_setup_failure(device)
         raise
     return True
@@ -116,5 +125,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: FrameConfigEntry) -> bo
         _restore_callbacks()
         coordinator.device.resume_remote()
         return False
+    coordinator.clear_art_service_repair()
     await coordinator.device.async_stop()
     return True

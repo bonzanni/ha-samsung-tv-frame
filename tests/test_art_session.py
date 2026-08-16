@@ -1170,3 +1170,202 @@ async def test_terminal_stop_aborts_real_cancellation_resistant_art_socket(
         for task in asyncio.all_tasks()
         if task.get_name() == "samsung_tv_frame-art-socket-close"
     ]
+
+
+async def test_host_unavailable_is_exposed_and_cleared_on_success():
+    """The wedge has to be observable, or nothing can report it.
+
+    `ArtHostUnavailable` is the one failure whose only remedy is a physical
+    power cycle, so the session must be able to say it is in that state
+    rather than only backing off quietly.
+    """
+    art = FakeArt([ArtHostUnavailable("no host"), None])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    assert not session.host_unavailable
+
+    assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert session.host_unavailable
+
+    clock.now = session._next_retry_at
+    assert await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert not session.host_unavailable
+
+    await session.async_stop()
+
+
+async def test_generic_failures_do_not_report_a_wedged_art_host():
+    """A TV that is merely off must not be reported as a wedged art service."""
+    art = FakeArt([ConnectionFailure("boom")])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert session.state is ArtSessionState.BACKOFF
+    assert not session.host_unavailable
+
+    await session.async_stop()
+
+
+async def test_entering_dormancy_on_a_hostless_host_is_logged(caplog):
+    """Today this is the quietest state the integration can be in.
+
+    It is also the only one that needs the owner to walk over and unplug the
+    TV, so it must not be silent.
+    """
+    art = FakeArt([ArtHostUnavailable("no host") for _ in range(3)])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+            clock.now = session._next_retry_at
+
+    assert session.state is ArtSessionState.DORMANT
+    warnings = [
+        record for record in caplog.records if record.levelno >= logging.WARNING
+    ]
+    assert warnings, "entering hostless dormancy logged nothing"
+    assert any("power" in record.getMessage().lower() for record in warnings), (
+        "the warning must name the remedy, which is not guessable"
+    )
+
+    await session.async_stop()
+
+
+async def test_a_transient_failure_does_not_clear_a_confirmed_wedge():
+    """A wedge is only disproved by a successful connection.
+
+    An ordinary connection error is not evidence the Art host came back — and
+    letting it clear the flag makes the repair flap on and off, which trains
+    the owner to ignore the one notification that needs them to act.
+    """
+    art = FakeArt([ArtHostUnavailable("no host"), ConnectionFailure("boom"), None])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert session.host_unavailable
+
+    clock.now = session._next_retry_at
+    assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert session.host_unavailable, (
+        "a transient error cleared a confirmed wedge"
+    )
+
+    clock.now = session._next_retry_at
+    assert await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert not session.host_unavailable
+
+    await session.async_stop()
+
+
+async def test_the_dormancy_warning_is_said_once_not_every_retry(caplog):
+    """Dormant retries re-enter CONNECTING, so a naive state guard re-fires.
+
+    At 15-minute dormancy that is a warning every 15 minutes, forever, for a
+    fault the owner has already been told about.
+    """
+    art = FakeArt([ArtHostUnavailable("no host") for _ in range(6)])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(6):
+            await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+            clock.now = session._next_retry_at
+
+    warnings = [
+        record
+        for record in caplog.records
+        if record.levelno >= logging.WARNING
+        and "Art host" in record.getMessage()
+    ]
+    assert len(warnings) == 1, (
+        f"expected one warning for one dormancy, got {len(warnings)}"
+    )
+
+    await session.async_stop()
+
+
+async def test_recovery_rearms_the_dormancy_warning(caplog):
+    """A second, separate wedge must be announced again.
+
+    The session stays READY after a successful connect, so the receiver has
+    to actually die before it will attempt (and fail) again — which is what
+    happens on the device when the Art service wedges a second time.
+    """
+    art = FakeArt(
+        [ArtHostUnavailable("no host") for _ in range(3)]
+        + [None]
+        + [ArtHostUnavailable("no host") for _ in range(3)]
+    )
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+            clock.now = session._next_retry_at
+        assert session.state is ArtSessionState.DORMANT
+
+        assert await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+        assert not session.host_unavailable
+
+        # The Art service wedges again: the live receiver drops.
+        art.alive = False
+        for _ in range(3):
+            await session.async_ensure_ready(ArtSessionTrigger.USER)
+            clock.now = session._next_retry_at
+
+    warnings = [
+        record
+        for record in caplog.records
+        if record.levelno >= logging.WARNING
+        and "Art host" in record.getMessage()
+    ]
+    assert len(warnings) == 2, (
+        f"a recovered-then-wedged-again TV must warn twice, got {len(warnings)}"
+    )
+    assert session.host_unavailable
+
+    await session.async_stop()
+
+
+async def test_a_reachable_edge_does_not_retract_a_confirmed_wedge():
+    """A TV coming back on the network has not proved its Art host came back.
+
+    Measured on the device: the wedge survives a full power-off and a
+    Wake-on-LAN wake, so the reachable edge that follows one is no evidence
+    at all. Clearing the fault there would drop the repair on every power
+    cycle and re-raise it three retries later.
+
+    The edge must still reset the *backoff*, which is what lets the session
+    probe immediately — that behaviour is relied on elsewhere and is
+    deliberately left alone.
+    """
+    art = FakeArt([ArtHostUnavailable("no host")])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert session.host_unavailable
+
+    session.observe_power(False, None, False)
+    session.observe_power(True, "on", True)
+
+    assert session.host_unavailable, (
+        "a reachable edge retracted a wedge it is no evidence about"
+    )
+    assert session._next_retry_at == 0.0, "the edge must still clear the backoff"
+
+    await session.async_stop()
