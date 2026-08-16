@@ -171,23 +171,41 @@ This is the deliberate half of the design.
 That sentence goes in `strings.json` and the README, because an entity that
 overclaims is how this integration got into this position in the first place.
 
-## Deferred: telling art-sleep from a real power-off
+## ~~Deferred~~ RESOLVED: art-sleep cannot be told from a real power-off
 
-Not designed here, because the measurement that would decide it has not been
-made. Two candidate discriminators, both **unproven**:
+**Measured 2026-08-16/17 (issue #8). Both candidate discriminators are dead.**
+Full report: `docs/device/2026-08-16-art-sleep-vs-power-off-experiment.md`.
 
-1. **Standby-window duration.** Project memory records ~3 min of NIC-up standby
-   after a 3 s power hold; the art-sleep standby phase measured under 30 s.
-   Confirming needs a ~2 s sampler across *both* transitions — 30 s sampling
-   already produced one wrong conclusion this month.
-2. **Push-event pattern.** A power-off from art emits `art_mode_changed(off)`
-   and a measured ~7 s false `watching` blip; the one observed art-sleep went
-   `art_mode → off` directly. One sample each side.
+A 2 s sampler plus a live art listener, in one process, captured both transitions
+on one clock — 3,554 ticks across two runs with zero lost slots.
 
-Until one of them is measured, the connection sensor deliberately says only
-"no contact", and `binary_sensor.art_mode` keeps its current behaviour: changing
-it would be a breaking change made to resolve an ambiguity the connection sensor
-already exposes.
+1. **Standby-window duration — falsified.** The premise was ~3 min for a
+   power-off against under 30 s for art-sleep. The real window is **~17 s for
+   both**: in the run where both halves shared one clock they agreed *to the
+   decisecond* (standby → last 8001 answer 14.0 s, standby → full network exit
+   17.2 s, identical). The ~3 min figure carried in project memory since
+   2026-07-07 is wrong by an order of magnitude. At a 10 s poll the window is
+   under two poll intervals wide, so even a real 2 s difference would be
+   unusable.
+2. **Push-event pattern — falsified.** Both transitions emit **`go_to_standby`**,
+   ~1 s before `PowerState` flips. Art-sleep emits it *alone*: the TV never sends
+   `art_mode_changed` when the panel sleeps, so from the art channel's point of
+   view a sleeping Frame is still in art mode. The `go_to_standby` handler's
+   existing comment — *"never a state by itself (the destination is ambiguous)"* —
+   is now measured rather than assumed.
+
+One narrow sub-case lacks a raw capture: a 3 s power hold issued *directly* from
+art mode, which project memory claims emits `art_mode_changed(off)` first. The
+indirect evidence is against it — in a power-off performed from art mode with the
+integration itself observing, `tv_mode` went `art_mode → off` in one transition
+with no `watching` in between, i.e. no sign of the ~7 s false blip that claim
+rests on. Corroborating, not conclusive (`standby_wins` could mask a very short
+gap). Not claimed, and not designed for, until captured raw.
+
+So this section closes as **measured and rejected**, not pending. The connection
+sensor's "no contact, cause unstated" wording is not a hedge — it is the strongest
+true statement available. `binary_sensor.art_mode` keeps its current behaviour for
+the same reason: no better signal exists on this device.
 
 ## Test plan (TDD, failing first)
 

@@ -120,9 +120,10 @@ capture caught it:
 | **1 — standby** | **up** | **open** | **open** | **refused** | **`standby`** | `off` |
 | **2 — disconnect** | **100% loss** | timeout | timeout | timeout | unreachable | `off` |
 
-Phase 1 lasted **under 30 s**. Note UPnP on 9197 turns *refused* while
-everything else is still open — a distinct signal from the timeouts that
-characterise phase 2.
+Phase 1 lasted **under 30 s** — later timed at **17.2 s** with a 2 s sampler, and
+found to be the same length for a real power-off. Note UPnP on 9197 turns
+*refused* while everything else is still open — a distinct signal from the
+timeouts that characterise phase 2.
 
 **4. Both wake paths work, and both return to art mode — CONFIRMED.**
 
@@ -167,19 +168,24 @@ The problem is not "an unmapped state the integration fails to detect". It is
 That reframing rules out the obvious repair — probing harder, or adding ICMP —
 because in phase 2 there is nothing left to probe.
 
-Two candidate discriminators, both **UNPROVEN** and both worth a dedicated
-probe:
+Two candidate discriminators were named here as **UNPROVEN**. Both were measured
+on 2026-08-16/17 (issue #8) and **both are now falsified** — see
+`2026-08-16-art-sleep-vs-power-off-experiment.md`. In summary:
 
-- **Standby-window duration.** Project memory puts the real power-off standby
-  window at ~3 minutes; the art-sleep window measured here was under 30 s. If
-  that separation holds, duration is a robust discriminator that does not
-  depend on catching an event. Confirming it needs a ~2 s sampler across both
-  transitions — the 30 s interval used here is far too coarse to time phase 1.
-- **Push-event pattern.** The observed art-sleep went `art_mode -> off` with no
-  intervening `watching`, whereas project memory records a real power-off from
-  art emitting `art_mode_changed(off)` first and producing a ~7 s false
-  `watching` blip. Weaker evidence: one sample of sleep, and the power-off half
-  is July's note rather than a fresh measurement.
+- ~~**Standby-window duration.**~~ **FALSIFIED.** The ~3 minute power-off figure
+  quoted from project memory is wrong by an order of magnitude. Measured at 2 s
+  resolution, the standby window is **~17 s for both** transitions, and in the run
+  that captured both on one clock they agreed to the decisecond (standby → last
+  8001 answer 14.0 s; standby → full network exit 17.2 s; identical).
+- ~~**Push-event pattern.**~~ **FALSIFIED.** Both transitions emit
+  **`go_to_standby`**, ~1 s before `PowerState` flips. Art-sleep emits it alone
+  and sends **no** `art_mode_changed` at all — the TV never announces leaving art
+  mode when the panel sleeps.
+
+The phase-1 table above stands, with one correction from the finer sampler: **UPnP
+9197 flipping to `refused` can lead `PowerState: standby` by up to 2 s**, making it
+the earliest network-visible sign of either transition — and identical for both,
+so it discriminates nothing.
 
 ### Withdrawn
 
@@ -278,7 +284,7 @@ real power-off.
 #### OFF derivation (unreachable => OFF, 2-poll debounce) — **MISMATCH**
 
 - **Integration claims:** Two consecutive unreachable heartbeats mean the TV is powered off. const.py:62 OFF_DEBOUNCE_COUNT=2; coordinator.py:201-215.
-- **Device reality:** Live record for this model is TWO-PHASE, not one: a 3 s KEY_POWER hold puts it into a ~3 MIN standby window with the NIC UP and REST answering PowerState="standby" (memory frame-state-detection, live 2026-07-07; commit 469fcef), and only later does it drop off WiFi (spec 2026-07-01:41). The observed ICMP-up/all-TCP-closed state matches NEITHER phase — in the standby phase 8001 answers. Unreachable is therefore not a proven OFF fingerprint.
+- **Device reality:** Live record for this model is TWO-PHASE, not one: a 3 s KEY_POWER hold puts it into a standby window with the NIC UP and REST answering PowerState="standby", and only later does it drop off WiFi (spec 2026-07-01:41). That window was recorded as "~3 MIN" (memory frame-state-detection, live 2026-07-07; commit 469fcef); **measured at 2 s resolution on 2026-08-16 it is 17.2 s** — the ~3 min figure is withdrawn. The observed ICMP-up/all-TCP-closed state matches NEITHER phase — in the standby phase 8001 answers. Unreachable is therefore not a proven OFF fingerprint, but it is now proven *undecidable*: art-sleep produces the identical sequence with identical timings (issue #8).
 
 #### PowerState "standby" on this model — **CONFIRMED**
 
