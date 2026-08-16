@@ -104,3 +104,4 @@ class FrameData:
     art_settings: ArtSettingsSnapshot | None = None
     slideshow: SlideshowState | None = None
     optional_art_generation: int | None = None
+    art_service_unavailable: bool = False

@@ -25,6 +25,7 @@ async def async_setup_entry(
         [
             FrameArtModeBinarySensor(entry.runtime_data),
             FrameConnectionBinarySensor(entry.runtime_data),
+            FrameArtServiceBinarySensor(entry.runtime_data),
         ]
     )
 
@@ -72,3 +73,38 @@ class FrameConnectionBinarySensor(FrameEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self.coordinator.data.reachable
+
+
+class FrameArtServiceBinarySensor(FrameEntity, BinarySensorEntity):
+    """Whether the TV's Art service has stopped hosting its own channel.
+
+    A distinct failure from the TV being off or unreachable: the websocket is
+    accepted and the handshake answered, but the TV reports no internal Art
+    host, so every Art query fails while the panel keeps displaying artwork.
+
+    Measured 2026-08-16: it survives repeated reconnects, a 3 s power hold with
+    a full network exit, a Wake-on-LAN wake, and leaving and re-entering art
+    mode. Only a mains power cycle cleared it. That is why this is published as
+    a PROBLEM rather than folded into the connection sensor — it is the one
+    fault the integration can detect but never fix, and the owner has to be
+    told, in time to act.
+
+    Off while the TV is unreachable: a TV we cannot see is not evidence of a
+    wedged Art service, and reporting one would fire a recovery automation
+    every time the TV is switched off.
+    """
+
+    _attr_translation_key = "art_service"
+    _attr_name = "Art service"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: FrameCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{coordinator.config_entry.data[CONF_MAC]}_art_service"
+        )
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.data.art_service_unavailable
