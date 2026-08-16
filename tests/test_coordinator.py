@@ -4,7 +4,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.config_entries import ConfigEntry, SOURCE_REAUTH
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.samsung_tv_frame.art_session import ArtSessionState
@@ -27,7 +27,6 @@ from custom_components.samsung_tv_frame.models import (
     SlideshowState,
     TvMode,
 )
-
 
 SETTINGS = ArtSettingsSnapshot(
     supported=frozenset(
@@ -1055,7 +1054,6 @@ async def test_reconcile_does_not_overwrite_newer_push(
     async def _stale_mode(*_args, **_kwargs):
         mode_started.set()
         await release_mode.wait()
-        return None
 
     mock_device.async_get_artmode.side_effect = _stale_mode
     coord._art_fail_streak = 2
@@ -1112,7 +1110,6 @@ async def test_current_art_ready_loss_hides_optional_cache_but_live_none_is_curr
 
     async def _lose_ready_during_current_art():
         mock_device.art_ready = False
-        return None
 
     mock_device.art_generation = 2
     mock_device.async_get_current_art.side_effect = (
@@ -1429,7 +1426,6 @@ async def test_failed_due_reconcile_counts_once(hass, mock_device):
 
     async def _failed_mode(*_args, **_kwargs):
         mock_device.art_ready = False
-        return None
 
     mock_device.async_get_artmode.side_effect = _failed_mode
     await coord._async_update_data()

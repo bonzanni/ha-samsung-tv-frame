@@ -64,7 +64,7 @@ class FrameArtModeSwitch(FrameEntity, SwitchEntity):
     async def _async_set(self, on: bool) -> None:
         try:
             await self.coordinator.device.async_set_artmode(on)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to switch art mode") from err
         await self.coordinator.async_request_refresh()
 
@@ -105,6 +105,6 @@ class FrameBrightnessSensorSwitch(FrameEntity, SwitchEntity):
     async def _async_set(self, enabled: bool) -> None:
         try:
             await self.coordinator.device.async_set_brightness_sensor(enabled)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set art brightness sensor") from err
         await self.coordinator.async_request_art_reconcile()

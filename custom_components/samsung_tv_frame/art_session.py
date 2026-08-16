@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Coroutine
-from enum import StrEnum
 import random
 import time
+from collections.abc import Callable, Coroutine
+from enum import StrEnum
 from typing import Any, cast
 
 from samsungtvws.exceptions import ConnectionFailure

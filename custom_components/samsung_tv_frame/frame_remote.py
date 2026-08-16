@@ -21,6 +21,8 @@ from websockets.asyncio.client import ClientConnection, connect
 from .const import CLIENT_NAME, PORT_WS, REMOTE_CLOSE_DEADLINE
 from .websocket_privacy import (
     QUIET_WEBSOCKET_LOGGER as _QUIET_WEBSOCKET_LOGGER,
+)
+from .websocket_privacy import (
     process_api_response_silently,
 )
 
@@ -96,7 +98,7 @@ class FrameRemote(SamsungTVWSAsyncRemote):
         except asyncio.CancelledError:
             self._force_abort(websocket)
             raise
-        except BaseException:
+        except BaseException:  # noqa: BLE001 - close failed any way => force the socket down
             self._force_abort(websocket)
 
     async def open(self) -> ClientConnection:
@@ -189,7 +191,7 @@ class FrameRemote(SamsungTVWSAsyncRemote):
                 self._force_abort(websocket)
                 self.connection = None
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001 - any handshake failure must leave no live socket
             websocket = self.connection
             if websocket is not None:
                 self._force_abort(websocket)

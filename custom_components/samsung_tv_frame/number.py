@@ -59,7 +59,7 @@ class FrameArtBrightnessNumber(FrameEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         try:
             await self.coordinator.device.async_set_art_brightness(int(value))
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set art brightness") from err
         await self.coordinator.async_request_art_reconcile()
 
@@ -96,6 +96,6 @@ class FrameArtColorTempNumber(FrameEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         try:
             await self.coordinator.device.async_set_color_temperature(int(value))
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set art color temperature") from err
         await self.coordinator.async_request_art_reconcile()

@@ -30,7 +30,6 @@ from custom_components.samsung_tv_frame.models import (
     SlideshowState,
 )
 
-
 VALID_ART_SETTINGS_PAYLOAD = {
     "data": json.dumps(
         [

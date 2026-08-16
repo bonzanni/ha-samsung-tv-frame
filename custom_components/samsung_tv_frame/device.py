@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Any
@@ -389,7 +390,7 @@ class FrameDevice:
             return await operation()
         except (ResponseError, InvalidArtSettingError):
             raise
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             await self._art_session.async_connection_failed(err)
             raise
 
@@ -799,7 +800,7 @@ class FrameDevice:
             await remote.close()
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001 - any close failure means the socket is unusable
             raise ConnectionFailure("Remote control reset failed") from None
 
     def set_art_event_callback(self, callback: ArtEventCallback) -> None:
@@ -815,13 +816,11 @@ class FrameDevice:
             drain_error = err
         remote = self._remote
         if remote is not None:
-            try:
+            # suppress(Exception) deliberately still lets CancelledError through,
+            # matching the explicit re-raise this replaced.
+            with contextlib.suppress(Exception):
                 async with asyncio.timeout(REMOTE_CLOSE_DEADLINE):
                     await remote.async_stop()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                pass
         if drain_error is not None:
             raise drain_error
 

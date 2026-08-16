@@ -27,6 +27,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
         with:
+          # Pin the linter. ruff-action installs the newest ruff by default, so
+          # an unpinned job changes its own rule set whenever ruff ships a
+          # release -- which is how this check went red with no code change.
+          # Bump this deliberately, with the resulting fixes in the same commit.
+          version: "0.16.3"
           args: check custom_components tests
 
   hassfest:

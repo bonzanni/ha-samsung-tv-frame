@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Tooling only; no runtime behavior change. Ruff has been failing on `main`
+  since 0.8.0 through no code fault: `astral-sh/ruff-action` installs the newest
+  ruff on every run, so the rule set changed underneath the repo. Pin ruff to
+  0.16.3 in CI and clear all 80 findings. Bump the pin deliberately, with the
+  resulting fixes in the same commit.
+- Replace the pure `try/except/pass` teardown blocks with
+  `contextlib.suppress(...)`. This is behavior-preserving:
+  `asyncio.CancelledError` derives from `BaseException`, so `suppress(Exception)`
+  still lets cancellation propagate exactly as the explicit re-raise did.
+  Deliberate broad excepts that run recovery code keep their handler and carry a
+  justified `# noqa: BLE001`.
+- Pin `pytest-homeassistant-custom-component==0.13.355` (Home Assistant
+  2026.8.1) so the test environment matches the core running in production. The
+  harness previously floated to an older core than we ship against, which is
+  what allowed the 0.9.1 requirement conflict to reach production with a green
+  suite. With the pin in place, `tests/test_manifest.py` reads the real
+  production constraints and does catch that manifest.
+
 ## 0.9.1
 
 - **FIX:** the integration failed to load on Home Assistant 2026.8 and later,

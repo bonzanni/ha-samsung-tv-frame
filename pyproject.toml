@@ -1,3 +1,16 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+# CI runs Python 3.13; keep the lint target aligned with it.
+target-version = "py313"
+
+[tool.ruff.lint]
+ignore = [
+  # Home Assistant's Entity API declares _attr_* as ordinary assignable
+  # attributes. Annotating our overrides as ClassVar to satisfy RUF012 would
+  # conflict with those base-class declarations, and none of ours is ever
+  # assigned per instance.
+  "RUF012",
+]

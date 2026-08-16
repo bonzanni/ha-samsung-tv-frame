@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Coroutine
 import contextlib
+import json
+import uuid
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime
-import json
 from typing import Any
-import uuid
 
 from samsungtvws import helper
 from samsungtvws.art.art import ART_ENDPOINT, ArtChannelEmitCommand
@@ -175,7 +175,7 @@ class FrameArt(SamsungTVWSAsyncConnection):
                 close_task.result()
             except asyncio.CancelledError:
                 abort_once()
-            except BaseException:
+            except BaseException:  # noqa: BLE001 - any close outcome must still abort the socket
                 abort_once()
         else:
             abort_once()
@@ -189,7 +189,7 @@ class FrameArt(SamsungTVWSAsyncConnection):
                         cancellation = err
                         abort_once()
                         close_task.cancel()
-                except BaseException:
+                except BaseException:  # noqa: BLE001 - stop waiting on a socket that failed any way
                     break
             if close_task.done() and not close_task.cancelled():
                 with contextlib.suppress(BaseException):
@@ -688,7 +688,9 @@ class FrameArt(SamsungTVWSAsyncConnection):
             request_id=upload_id,
             file_type=normalized_type,
             file_size=len(data),
-            image_date=datetime.now().strftime("%Y:%m:%d %H:%M:%S"),
+            # The TV stamps uploads in its own local wall time; a UTC value
+            # would show the wrong capture date in the Art gallery.
+            image_date=datetime.now().strftime("%Y:%m:%d %H:%M:%S"),  # noqa: DTZ005
             matte_id=matte or "none",
             portrait_matte_id=matte or "none",
             conn_info={
@@ -884,7 +886,7 @@ class FrameArt(SamsungTVWSAsyncConnection):
                 await self._dispatch_frame(event, frame)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001 - receiver must never propagate; it always runs cleanup
             LOGGER.debug("Art receiver exited")
         finally:
             await self._receiver_finished(connection)
@@ -933,7 +935,7 @@ class FrameArt(SamsungTVWSAsyncConnection):
                 awaitable = callback(event, payload)
                 if awaitable is not None:
                     await awaitable
-            except Exception:
+            except Exception:  # noqa: BLE001 - a bad consumer callback must not kill the receiver
                 LOGGER.warning("Art event callback failed")
 
     async def _receiver_finished(self, connection: ClientConnection | None) -> None:

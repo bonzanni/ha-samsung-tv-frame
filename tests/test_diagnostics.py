@@ -28,7 +28,6 @@ from custom_components.samsung_tv_frame.models import (
     TvMode,
 )
 
-
 LOADED_PRIVATE_CANARIES = (
     "__DIAG_LOADED_HOST_CANARY__",
     "__DIAG_LOADED_MAC_CANARY__",

@@ -61,7 +61,7 @@ class FrameArtSleepAfterSelect(FrameEntity, SelectEntity):
         """Set the sleep-after wire value."""
         try:
             await self.coordinator.device.async_set_motion_timer(option)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError("Failed to set art sleep after") from err
         await self.coordinator.async_request_art_reconcile()
 
@@ -98,7 +98,7 @@ class FrameArtMotionSensitivitySelect(FrameEntity, SelectEntity):
         """Set the motion-sensitivity wire value."""
         try:
             await self.coordinator.device.async_set_motion_sensitivity(option)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             raise HomeAssistantError(
                 "Failed to set art motion sensitivity"
             ) from err

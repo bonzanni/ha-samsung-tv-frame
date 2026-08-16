@@ -12,6 +12,10 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from websockets.protocol import State
 
+from custom_components.samsung_tv_frame.config_flow import (
+    CannotConnect,
+    validate_and_pair,
+)
 from custom_components.samsung_tv_frame.const import (
     CONF_HOST,
     CONF_MAC,
@@ -21,11 +25,6 @@ from custom_components.samsung_tv_frame.const import (
     OPT_HEARTBEAT,
     PAIRING_DEADLINE,
 )
-from custom_components.samsung_tv_frame.config_flow import (
-    CannotConnect,
-    validate_and_pair,
-)
-
 
 RECONFIGURE_PAIRING_DESCRIPTION = (
     "Make sure the TV is showing normal TV or app content (not Art Mode). "
@@ -190,9 +189,8 @@ async def test_pair_missing_remote_token_fails_before_art(hass):
     art = _art_client()
     with pairing_patches(
         hass, remote=remote, art=art, ssl_context=object()
-    ) as art_constructor:
-        with pytest.raises(CannotConnect):
-            await validate_and_pair(hass, "1.2.3.4")
+    ) as art_constructor, pytest.raises(CannotConnect):
+        await validate_and_pair(hass, "1.2.3.4")
 
     art_constructor.assert_not_called()
     remote.async_stop.assert_awaited_once()
@@ -234,9 +232,8 @@ async def test_pair_open_failure_closes_created_clients(
 
     with pairing_patches(
         hass, remote=remote, art=art, ssl_context=object()
-    ) as art_constructor:
-        with pytest.raises(expected_error):
-            await validate_and_pair(hass, "1.2.3.4")
+    ) as art_constructor, pytest.raises(expected_error):
+        await validate_and_pair(hass, "1.2.3.4")
 
     remote.async_stop.assert_awaited_once()
     remote.close.assert_not_awaited()

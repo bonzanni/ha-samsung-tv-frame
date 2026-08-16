@@ -1,5 +1,5 @@
-from dataclasses import replace
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, call, patch
 
