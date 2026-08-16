@@ -542,32 +542,15 @@ async def test_exact_slideshow_setters_send_one_normal_request(
     )
 
 
-async def test_slideshow_falls_back_only_after_response_error():
-    art = make_art()
-    art.request = AsyncMock(
-        side_effect=[ResponseError("unsupported"), {"event": "changed"}]
-    )
-
-    assert await art.set_slideshow(0, False, "MY-C0002") == {
-        "event": "changed"
-    }
-    params = {
-        "value": "off",
-        "category_id": "MY-C0002",
-        "type": "slideshow",
-    }
-    assert art.request.await_args_list == [
-        (("set_auto_rotation_status",), params),
-        (("set_slideshow_status",), params),
-    ]
-
-
-async def test_slideshow_does_not_mask_transport_errors():
+@pytest.mark.parametrize(
+    "method", ["set_auto_rotation", "set_legacy_slideshow"]
+)
+async def test_slideshow_setters_do_not_mask_transport_errors(method):
     art = make_art()
     art.request = AsyncMock(side_effect=ConnectionFailure("lost"))
 
     with pytest.raises(ConnectionFailure, match="lost"):
-        await art.set_slideshow(15, False, "MY-C0002")
+        await getattr(art, method)(15, False, "MY-C0002")
     art.request.assert_awaited_once()
 
 

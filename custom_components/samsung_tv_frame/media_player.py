@@ -45,6 +45,7 @@ from .const import (
 )
 from .coordinator import FrameConfigEntry, FrameCoordinator
 from .entity import FrameEntity
+from .frame_art import UnsupportedArtCommandError
 from .models import TvMode
 
 PARALLEL_UPDATES = 0
@@ -283,9 +284,14 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
 
     async def async_delete_art_service(self, content_id: str) -> None:
         try:
-            await self.coordinator.device.async_delete_art(content_id)
+            confirmed = await self.coordinator.device.async_delete_art(content_id)
         except Exception as err:
             raise HomeAssistantError(f"Failed to delete artwork {content_id}") from err
+        if not confirmed:
+            raise HomeAssistantError(
+                f"The TV did not confirm deleting artwork {content_id}; "
+                "it may still be on the TV"
+            )
         await self.coordinator.async_request_refresh()
 
     async def async_set_slideshow_service(
@@ -295,6 +301,10 @@ class FrameMediaPlayer(FrameEntity, MediaPlayerEntity):
             await self.coordinator.device.async_set_slideshow(
                 duration_minutes, shuffle, category_id
             )
+        except UnsupportedArtCommandError as err:
+            # Carries its own reason: the TV refused the capability, or the
+            # Art session went away before one could be established.
+            raise HomeAssistantError(str(err)) from err
         except Exception as err:
             raise HomeAssistantError("Failed to configure the slideshow") from err
         await self.coordinator.async_request_art_reconcile()

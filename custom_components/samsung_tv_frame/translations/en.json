@@ -41,7 +41,10 @@
     }
   },
   "entity": {
-    "binary_sensor": {"art_mode": {"name": "Art mode"}},
+    "binary_sensor": {
+      "art_mode": {"name": "Art mode"},
+      "connection": {"name": "Connection"}
+    },
     "image": {"current_art_image": {"name": "Current art image"}},
     "number": {
       "art_brightness": {"name": "Art brightness"},
@@ -84,7 +87,9 @@
     "trigger_type": {
       "turned_off": "Turned off",
       "started_watching": "Started watching",
-      "entered_art_mode": "Entered art mode"
+      "entered_art_mode": "Entered art mode",
+      "lost_contact": "Lost contact with the TV",
+      "regained_contact": "Regained contact with the TV"
     }
   },
   "services": {

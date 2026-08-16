@@ -1,6 +1,8 @@
 # tests/test_binary_sensor.py
 from unittest.mock import patch
 
+from homeassistant.const import EntityCategory
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.samsung_tv_frame.const import (
@@ -35,3 +37,40 @@ async def test_art_binary_sensor_on(hass, mock_device):
     state = hass.states.get("binary_sensor.samsung_frame_tv_art_mode")
     assert state is not None
     assert state.state == "on"
+
+
+async def test_connection_sensor_reports_the_rest_heartbeat(hass, mock_device):
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    mock_device.async_get_artmode.return_value = True
+    await _setup(hass, mock_device)
+
+    state = hass.states.get("binary_sensor.samsung_frame_tv_connection")
+    assert state is not None
+    assert state.state == "on"
+    assert state.attributes["device_class"] == "connectivity"
+
+
+async def test_connection_sensor_stays_available_when_unreachable(
+    hass, mock_device
+):
+    """An unreachable TV is a successful poll, so the signal must survive it.
+
+    This is the whole point of the entity: it has to be able to say
+    "no contact" out loud, which it cannot do if it goes unavailable.
+    """
+    mock_device.async_device_info.return_value = None
+    await _setup(hass, mock_device)
+
+    state = hass.states.get("binary_sensor.samsung_frame_tv_connection")
+    assert state is not None
+    assert state.state == "off"
+
+
+async def test_connection_sensor_is_diagnostic(hass, mock_device):
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    await _setup(hass, mock_device)
+
+    registry = er.async_get(hass)
+    entry = registry.async_get("binary_sensor.samsung_frame_tv_connection")
+    assert entry is not None
+    assert entry.entity_category is EntityCategory.DIAGNOSTIC

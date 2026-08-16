@@ -23,7 +23,9 @@ strictly, because most of the risk lives in the gap between them:
 | *UNKNOWN* | Never examined |
 | **MISMATCH** | The integration's promise and the device's established reality actually disagree |
 
-Tally across 42 capabilities: **11 CONFIRMED · 12 ASSUMED · 5 UNKNOWN · 14 MISMATCH.**
+Tally across 42 capabilities, as first written: **11 CONFIRMED · 12 ASSUMED ·
+5 UNKNOWN · 14 MISMATCH.** Later the same day a second probe run moved several
+of them — see "Update, later the same day" below, and the struck-through rows.
 
 A caveat that colours everything below: the D2D upload/thumbnail evidence and
 all art-push evidence predate the v0.6.7 async transport rewrite, and **no
@@ -198,6 +200,72 @@ So *any* condition that silences port 8001 — art-sleep, a Tizen hiccup, an AP
 outage, a DHCP reassignment — becomes a confident `off`, with entities still
 available asserting it. Art-sleep is now a confirmed member of that set.
 
+## Update, later the same day: eleven answers from one probe run
+
+A second live session — art socket opened from the paired host with Home
+Assistant's config entry disabled — settled several rows below and closed four
+probes outright. Identifiers masked, per `AGENTS.md`.
+
+### Newly CONFIRMED
+
+- **`api_version` answers `4.3.4.0`** in 0.02 s. This closes probe P1-11 and
+  retires a shipped worry in both directions: the `api_version` request that
+  `FrameArt.upload` sends as a *non-probe* is **not** a silent session-killer,
+  and because the version is not `0.97`, the websocket-binary upload branch is
+  **dead code on this firmware** — every upload here takes the D2D path.
+- **Upload → thumbnail → delete round-trips on the post-rewrite async
+  transport.** All previous evidence predated the v0.6.7 rewrite; that caveat is
+  lifted for user-uploaded content. A small JPEG uploaded in 1.6 s, the content
+  list went 13 → 14, `get_thumbnail` returned real bytes, the delete removed it
+  and the list returned to 13. The *store-art DRM refusal* path — the common
+  case on this TV — remains unprobed on this transport.
+- **`delete_image_list` reply shape.** Success answers with `content_id_list` as
+  a pretty-printed JSON **string** parsing to exactly the requested list, so the
+  echo-equality check in `FrameArt.delete` is correct here. An absent or
+  malformed content id draws a correlated `ResponseError` in 0.02 s; an empty
+  list is accepted and echoes `"[]"`.
+- **The TV pushes `image_deleted`** (carrying `content_id`) on the art channel,
+  ahead of the correlated reply. `handle_art_event` does not handle it, so
+  `current_art` is not cleared when the displayed artwork is deleted.
+- **`set_auto_rotation_status` is silent — re-confirmed on current firmware.**
+  Sent with the values the TV already held: no correlated frame in 25 s, and no
+  frame at all in a further 45 s of listening, while `get_slideshow_status`
+  answered in under a second immediately before and after.
+- **`get_content_list` answers** — 13 items, each carrying `category_id`,
+  `content_id`, `content_type`, `height`, `image_date`, `matte_id`,
+  `portrait_matte_id`, `slideshow`, `width`. Note what is **absent**: no
+  `favorite` field, so the authoritative favourite read-back that probe P1-6 was
+  criticised for lacking is not available from this request either.
+- **`get_device_info` answers** (probe P2-18, 0.03 s): `current_rotation_status`
+  1, `support_brightness_sensor` `"TRUE"`, `support_motion_sensor` `"TRUE"`,
+  `support_color_tone` `"TRUE"`, `support_myshelf` `"FALSE"`, `resolution_type`
+  `"UHD"`, `tv_flash_size` 16 — a capability oracle the integration never asks
+  for, which would replace the current "infer support from which keys appeared
+  in `get_artmode_settings`" heuristic.
+- **`get_matte_list` and `get_photo_filter_list` both answer** (probe P2-16),
+  returning `matte_type_list` + `matte_color_list` and `filter_list`. The two
+  "unvalidatable free-text id" services are therefore validatable against the
+  TV's own catalogues.
+
+### Newly measured, and unexplained
+
+**The art channel cannot be handshaken from a non-paired host.** From a machine
+other than the Home Assistant host, presenting the same token and the same
+client name, the TLS upgrade completes in 0.02 s and the TV then sends
+**nothing** — no `ms.channel.connect`, no `ms.channel.unauthorized` — while Home
+Assistant connects normally from its own host a minute later. Two candidate
+causes (the grant being bound to the paired client host; the TV not having
+released the previous client) are not separated. Operationally it is settled:
+probe from the Home Assistant host.
+
+### A third live observation of gap H1/H2
+
+Mid-probe the TV left the network on its own: 100% ICMP loss, 8001/8002/9197 all
+connect-timeout, and Home Assistant published `tv_mode: off` with every entity
+still available. Wake-on-LAN recovered it — REST answered `PowerState: on` 29.5 s
+after the packet, all ports open by 39 s. Indistinguishable, once again, from a
+real power-off.
+
 ## Capability matrix
 
 ### power/state
@@ -336,10 +404,11 @@ available asserting it. Art-sleep is now a confirmed member of that set.
 - **Integration claims:** Show an artwork by content id; upload a local file (allowlist-gated). media_player.py:254-281.
 - **Device reality:** Upload/select/delete round-trip CONFIRMED live (commit 577bcef) — but on the PRE-REWRITE synchronous transport. The v0.6.7 native-async D2D re-implementation has NO post-rewrite live record. D2D framing on both read and write sides is derived from the library and an external fork, explicitly labelled "a protocol reference, not a source dependency". Which upload branch this TV takes (api_version 0.97 websocket-binary vs D2D) has never been observed.
 
-#### delete_art result reporting — **MISMATCH**
+#### delete_art result reporting — ~~**MISMATCH**~~ **FIXED 2026-08-16**
 
 - **Integration claims:** Irreversibly delete an artwork; the service reports success.
-- **Device reality:** `FrameArt.delete` DOES validate the echoed content-id list (and handles a JSON-string response via json.loads, frame_art.py:461-477) and returns a bool — but `device.async_delete_art` (device.py:553-556) DISCARDS the return value and the service ignores it. A TV response that does not confirm the deletion is reported to the user as success.
+- **Device reality:** `FrameArt.delete` DOES validate the echoed content-id list (and handles a JSON-string response via json.loads) and returns a bool — but `device.async_delete_art` was typed `-> None` and DISCARDED it, so a response that confirmed nothing was reported as success.
+- **Fixed**, and the live shapes are what made raising safe rather than a guess: success echoes the requested list exactly (so the check returns True), and a bad content id already raises a correlated `ResponseError`. `False` is therefore an answer that confirmed nothing, and the service now says so.
 
 #### set_favourite service — **MISMATCH**
 
@@ -354,10 +423,11 @@ available asserting it. Art-sleep is now a confirmed member of that set.
 - **Integration claims:** Read-only slideshow mode with duration and category attributes. sensor.py:64-98.
 - **Device reality:** Only the LEGACY getter answers on this firmware and the only observed value is "off" (hotfix design:33). "sequential"/"shuffle" have never been seen here. `duration_minutes` is SYNTHESIZED as 0 when parsing the observed off payload (art_settings.py:112), not read from the device. `category_id` is absent from the observed payload and publishes as None indefinitely.
 
-#### set_slideshow service — **MISMATCH**
+#### set_slideshow service — ~~**MISMATCH**~~ **FIXED 2026-08-16**
 
 - **Integration claims:** Atomically set duration, shuffle order and category. media_player.py:290-299.
-- **Device reality:** Split reality: `set_auto_rotation_status` (modern) is a CONFIRMED SILENT TIMEOUT here; `set_slideshow_status` (legacy) is a CONFIRMED correlated success — but only for the identity write (off -> off). A real duration/shuffle/category write has never been live-verified. Worse, device.py:591-612 falls through to the modern-first path whenever the dialect is UNKNOWN (fresh generation before first reconcile) or UNSUPPORTED — reachable whenever a user calls the service after a new art generation, and that first command is the confirmed silent timeout that closes the socket.
+- **Device reality:** Split reality: `set_auto_rotation_status` (modern) is a CONFIRMED SILENT TIMEOUT here — re-confirmed on current firmware with a 25 s wait plus 45 s of listening; `set_slideshow_status` (legacy) is a CONFIRMED correlated success, but only for the identity write. A real duration/shuffle/category write is still not live-verified.
+- **Fixed:** the write no longer falls through to the modern-first path when the dialect is UNKNOWN or UNSUPPORTED. An unlearned dialect is discovered with the bounded 5 s read probes, which cannot close the socket, and a TV that answers no slideshow dialect gets a clean error instead of a blind write.
 
 #### Slideshow category ids — *ASSUMED*
 
@@ -460,7 +530,21 @@ What survives the correction is the structural defect, which does not depend on 
 
 Note two surveys asserted 'standby has never been observed on this model' — that is wrong, and traceable to the superseded 2026-07-01 spec table; the whole `standby_wins` mechanism exists precisely because standby IS observed here.
 
-### H2. Nothing anywhere distinguishes 'cannot reach the TV' from 'the TV is off'
+### H2. ~~Nothing anywhere distinguishes 'cannot reach the TV' from 'the TV is off'~~ — PARTLY FIXED 2026-08-16
+
+> **The signal now exists.** `binary_sensor.<tv>_connection` (connectivity,
+> diagnostic, undebounced) publishes whether the TV answered the heartbeat, and
+> `lost_contact` / `regained_contact` device triggers make it automatable. Fixed
+> alongside it: the art push path overwrote `reachable` with a hardcoded `True`,
+> so an unsolicited artwork change would have claimed contact on a TV whose REST
+> port had gone quiet.
+>
+> **What is NOT fixed:** the sensor says "no contact", not *why*. Art-sleep and
+> a real power-off remain indistinguishable — see the deferred discriminator in
+> `docs/superpowers/specs/2026-08-16-lost-contact-signal-design.md`. `tv_mode`
+> still derives OFF from unreachable, deliberately: that inference is right in
+> the common case, and every existing automation depends on it.
+
 
 **Symptom.** Operators cannot build 'TV unreachable' alerting, and cannot tell a network fault from a power-off. A DHCP address change makes the TV permanently 'off' with no repair path.
 
@@ -494,7 +578,15 @@ Note two surveys asserted 'standby has never been observed on this model' — th
 
 Code-verified, not inferred. frame_art.py:502-511 waits for sub-event `favorite_changed`. The dispatcher at frame_art.py:913-920 resolves an id-matched waiter only when sub_event equals the expected one or is 'error', and the uuidless rescue path is explicitly skipped when a request_id is present (`uuidless = self._uuidless_pending if message_id is None else None`). The live-derived ack shape for THIS firmware — established from the three probed setters — is event == the request name with a matching request_id. If the TV acks with event `change_favorite`, the future never resolves: 20 s non-probe deadline, websocket closed, art generation retired (frame_art.py:822-831). Never probed.
 
-### H4. `set_slideshow` falls through to a confirmed-dead command whenever the dialect is not yet learned
+### H4. ~~`set_slideshow` falls through to a confirmed-dead command whenever the dialect is not yet learned~~ — CONFIRMED, now FIXED
+
+> **Probed before it was acted on, and the finding survived.** Sent with the
+> values the TV already held, `set_auto_rotation_status` drew no correlated
+> frame in 25 s and no frame at all in 45 s more of listening, while
+> `get_slideshow_status` answered in under a second either side of it. The
+> write now routes only to a dialect this art generation has actually seen
+> answered; an unlearned one is discovered with the bounded read probes.
+
 
 **Symptom.** A slideshow automation fired shortly after HA restart or an art reconnect kills the art session instead of setting the slideshow, cascading into stale art state for every art entity.
 
@@ -514,7 +606,7 @@ The operator's own live probe (2026-07-02) recorded that get_artmode can transie
 
 ### Medium
 
-- **delete_art reports success even when the TV did not confirm the deletion** — A delete that the TV declined, partially applied, or answered ambiguously is reported to the user as success. The artwork is still on the TV; the user believes it is gone.
+- ~~**delete_art reports success even when the TV did not confirm the deletion**~~ — **FIXED 2026-08-16.** The verification the library already performed now reaches the caller, and the live reply shapes (exact echo on success, correlated error on a bad id) are what made surfacing it safe rather than a guess.
 
 - **current_art (and the image entity) publish stale artwork indefinitely while the art session is dead** — A dashboard shows an artwork the TV stopped displaying hours ago, with a fresh-looking timestamp. `_resolve_content_id` (media_player.py:363-369) then defaults change_matte / set_photo_filter / set_favourite to that stale id, so the mutation lands on the WRONG artwork and reports success.
 

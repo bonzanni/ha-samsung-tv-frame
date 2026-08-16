@@ -288,11 +288,33 @@ async def test_upload_art_rejects_disallowed_path(hass, mock_device, tmp_path):
 async def test_delete_art_service(hass, mock_device):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
     mock_device.async_get_artmode.return_value = False
+    mock_device.async_delete_art.return_value = True
     await _setup(hass, mock_device)
     await hass.services.async_call(
         DOMAIN, "delete_art",
         {"entity_id": ENTITY, "content_id": "MY_F0001"}, blocking=True,
     )
+    mock_device.async_delete_art.assert_awaited_once_with("MY_F0001")
+
+
+async def test_delete_art_service_fails_when_the_tv_does_not_confirm(
+    hass, mock_device
+):
+    """An unconfirmed delete must not be reported to the user as success.
+
+    The TV echoes the deleted content id back on success (live 2026-08-16),
+    so a reply that fails that check deleted nothing we can point to.
+    """
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    mock_device.async_get_artmode.return_value = False
+    mock_device.async_delete_art.return_value = False
+    await _setup(hass, mock_device)
+
+    with pytest.raises(HomeAssistantError, match="did not confirm"):
+        await hass.services.async_call(
+            DOMAIN, "delete_art",
+            {"entity_id": ENTITY, "content_id": "MY_F0001"}, blocking=True,
+        )
     mock_device.async_delete_art.assert_awaited_once_with("MY_F0001")
 
 
