@@ -65,44 +65,138 @@ These are fresh observations on the live device, all reproducible:
   to the `off` payload.
 - **Current settings:** art brightness 5, colour temperature 0, motion
   sensitivity 2, brightness sensor on, and **sleep-after = 60 minutes** — the
-  timer directly implicated in the open question below.
+  timer directly implicated in the dark-panel question below.
+- **Two full art-sleep cycles captured**, resolving that question: the sleep
+  timer is genuine (5:00 to the second), the panel goes fully dark, the TV
+  leaves the network in two phases (brief `standby`, then total disconnect),
+  and motion alone wakes it back into art mode with no Wake-on-LAN. Details in
+  the next section.
+- **`set_artmode_settings` accepts a write on this firmware** — the
+  `motion_timer` write was acknowledged in ~1.1 s and verified by read-back,
+  without dropping the art session. This is the first live evidence of an art
+  *write* succeeding on this model since the v0.6.7 transport rewrite.
 - **The integration agrees with the device in this state.** With the TV in art
   mode, every signal lined up: `tv_mode=art_mode`, `art_mode=on`,
   `media_player=on`, all optional entities live.
 
-## The open question: the dark-panel state
+## RESOLVED: the dark-panel (art-sleep) state
 
 The motivating question — *"the TV was not really off, only art mode was not
-displaying, because the motion sensor blanks the screen after a while"* — is
-**not yet resolved**, and this document does not claim otherwise.
+displaying, because the motion sensor blanks the screen after a while"* — was
+**settled by live experiment on 2026-08-16**. The operator's reading was
+correct; the mechanism is more awkward than it first appeared.
 
-What is established: with `sleep-after = 60 minutes`, the panel is expected to
-blank after an hour without motion. What is *not* established is what happens to
-the TV's network services at that moment, and that is the whole question,
-because of how the integration decides the TV is off.
+### Method
 
-An earlier reading in this session that suggested a novel "ICMP up, all TCP
-ports closed" state was a **measurement artifact** — busybox `sh` does not
-implement `/dev/tcp`, so every port test returned a false negative. It is
-withdrawn. No such state has been observed with a reliable tool.
+`art_sleep_after` was captured at its original value (60), written to 5 (the
+shortest non-`off` option), read back authoritatively, and later restored to 60
+and verified — the `AGENTS.md` mutation-probe contract. The room was then left
+free of motion while a 30 s sampler recorded raw network signals alongside the
+integration's derived entity state. The operator observed the panel directly and
+reported ground truth. Two full sleep cycles were captured.
 
-But the question it raised stands on its own, because of a genuine structural
-finding:
+### Findings
+
+**1. The timer is genuine and correctly labelled — CONFIRMED.** Exactly
+**5:00** elapsed between the write and the blank. This resolves the open
+question of whether the wire key `motion_timer` really is the "Art sleep after"
+control the UI presents: it is, and the write reached the device rather than
+merely updating Home Assistant optimistically. The write itself was
+acknowledged in ~1.1 s, well inside the 20 s deadline, so this firmware does
+accept `set_artmode_settings` for this key.
+
+**2. The panel goes fully dark — CONFIRMED by direct observation.** Operator
+report: *"no art at all"*. The dimmed-art interpretation is ruled out.
+
+**3. Sleep is a TWO-PHASE network exit — CONFIRMED.** The first capture missed
+this entirely because 30 s sampling stepped over the first phase; the second
+capture caught it:
+
+| Phase | ICMP | 8001 | 8002 | 9197 | REST `PowerState` | derived `tv_mode` |
+|---|---|---|---|---|---|---|
+| art mode | up | open | open | open | `on` | `art_mode` |
+| **1 — standby** | **up** | **open** | **open** | **refused** | **`standby`** | `off` |
+| **2 — disconnect** | **100% loss** | timeout | timeout | timeout | unreachable | `off` |
+
+Phase 1 lasted **under 30 s**. Note UPnP on 9197 turns *refused* while
+everything else is still open — a distinct signal from the timeouts that
+characterise phase 2.
+
+**4. Both wake paths work, and both return to art mode — CONFIRMED.**
+
+- *Motion:* no Wake-on-LAN required. The TV returned directly to `art_mode`
+  displaying the *same* artwork, and every entity recovered without
+  intervention.
+- *Wake-on-LAN:* `media_player.turn_on` woke it from phase 2 in **8 s**, also
+  straight into `art_mode`, confirmed both by entity state and by direct
+  operator observation of the panel.
+
+Neither path produced the **"WoL-wake zombie no-signal state"** recorded in
+project memory (art app never starts, art queries fail, TV powers itself off
+after a few minutes). That note should be scoped: it was observed waking a TV
+from a true power-off with no active source, and does **not** apply to waking
+from art-sleep, where the art app is evidently still resident.
+
+This also makes WoL a usable recovery from art-sleep, which matters given
+finding 5 — the integration cannot tell the two states apart, but `turn_on`
+recovers from *either*.
+
+**4b. A write issued immediately after wake can be silently lost — CONFIRMED.**
+Restoring `art_sleep_after` was attempted ~8 s after the TV became reachable:
+the service call returned HTTP 200, but the authoritative read-back still
+showed the old value. A second attempt ~17 s later succeeded and verified. The
+entity read `unavailable` at the moment of the first write. Any automation that
+issues a command straight after `turn_on` should therefore verify by read-back
+rather than trust the call's return — the integration offers no such guarantee
+today, and this is a concrete instance of the broader "writes report success on
+socket write alone" gap.
+
+**5. Art-sleep and a real power-off traverse the IDENTICAL network sequence.**
+This is the finding that matters. Project memory records a real power-off as
+NIC-up-with-`standby` followed by a Wi-Fi drop — the same two phases observed
+here. So `tv_mode: off` during art-sleep is **not a detection bug**: it is the
+`standby_wins` rule working exactly as designed, against a device that
+genuinely presents as powered off.
+
+### What this changes about the fix
+
+The problem is not "an unmapped state the integration fails to detect". It is
+"two distinct states that are indistinguishable by the signals currently used".
+That reframing rules out the obvious repair — probing harder, or adding ICMP —
+because in phase 2 there is nothing left to probe.
+
+Two candidate discriminators, both **UNPROVEN** and both worth a dedicated
+probe:
+
+- **Standby-window duration.** Project memory puts the real power-off standby
+  window at ~3 minutes; the art-sleep window measured here was under 30 s. If
+  that separation holds, duration is a robust discriminator that does not
+  depend on catching an event. Confirming it needs a ~2 s sampler across both
+  transitions — the 30 s interval used here is far too coarse to time phase 1.
+- **Push-event pattern.** The observed art-sleep went `art_mode -> off` with no
+  intervening `watching`, whereas project memory records a real power-off from
+  art emitting `art_mode_changed(off)` first and producing a ~7 s false
+  `watching` blip. Weaker evidence: one sample of sleep, and the power-off half
+  is July's note rather than a fresh measurement.
+
+### Withdrawn
+
+An earlier reading in this session suggested a novel "ICMP up, all TCP ports
+closed" state. It was a **measurement artifact** — busybox `sh` does not
+implement `/dev/tcp`, so every port test returned a false negative — and is
+withdrawn. Separately, the kernel neighbour table reported the TV as `REACHABLE`
+throughout phase 2, minutes after it had gone. **ARP is not a usable liveness
+signal here**, exactly as the completeness critic warned.
+
+### The structural finding underneath it all
 
 > **`reachable` is not reachability.** It means "an HTTP GET to TCP 8001
 > `/api/v2/` returned a `device` object within 8 s". ICMP, port 8002, port 9197
 > and ARP are never consulted anywhere in the integration — verified by grep.
 
-So *any* condition that stops port 8001 answering — a blanked panel, a Tizen
-hiccup, an AP outage, a DHCP change — is reported as a confident `off`. Whether
-the motion-sensor blank is such a condition is exactly what the P0 probes below
-must settle. Two OFF fingerprints are already on record for this model and they
-differ from each other: a ~3-minute standby window with the NIC up and 8001
-answering `PowerState: standby`, and a later phase where the TV drops off Wi-Fi
-entirely.
-
-A sampler is running for 6 hours to catch the transition. It can only see it if
-the room actually empties for the full hour.
+So *any* condition that silences port 8001 — art-sleep, a Tizen hiccup, an AP
+outage, a DHCP reassignment — becomes a confident `off`, with entities still
+available asserting it. Art-sleep is now a confirmed member of that set.
 
 ## Capability matrix
 
@@ -410,7 +504,7 @@ The operator's own live probe (2026-07-02) recorded that get_artmode can transie
 
 - **Poll deadline can be exceeded by a serialized worst-case poll, flipping every entity to unavailable** — All entities briefly go unavailable together with no state explanation, and the art-health counters do not reflect that anything went wrong.
 
-- **Sleep-After is a labelled interpretation of the wire key `motion_timer`** — A user sets what they believe is a screensaver timer and gets different behaviour; also directly relevant to gap #1, since this is the one control that can cause the panel to blank.
+- ~~**Sleep-After is a labelled interpretation of the wire key `motion_timer`**~~ — **RESOLVED 2026-08-16, no defect.** Writing `5` produced a blank panel exactly 5:00 later on the live device, so the control is what the UI calls it. The write was acknowledged in ~1.1 s and survived an authoritative read-back. See "RESOLVED: the dark-panel (art-sleep) state".
 
 - **Attributes published as real but permanently synthetic or blank** — A dashboard binding to slideshow category gets a permanent blank presented as a real attribute; a diagnostics reader concludes the TV lacks settings it actually supports.
 
