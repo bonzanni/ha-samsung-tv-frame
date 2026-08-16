@@ -612,3 +612,135 @@ async def test_options_flow_sets_heartbeat(hass):
         await hass.async_block_till_done()
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[OPT_HEARTBEAT] == 30
+
+
+# --- Discovery: DHCP / SSDP -------------------------------------------------
+# The manifest declares dhcp and ssdp matchers. Home Assistant's base ConfigFlow
+# supplies default steps for both, but they only fall through to async_step_user:
+# they never reconcile a discovery against an existing entry. That leaves the
+# integration with no way to repair a changed IP address, which matters because
+# `reachable` is a single-signal oracle over the REST port -- once the address
+# moves, the TV reads as permanently off.
+
+DISCOVERY_MAC = "02:00:00:00:00:01"
+# Home Assistant delivers DHCP MACs lowercase and colonless; format_mac()
+# is what reconciles that wire form with the colon-separated unique id.
+DISCOVERY_MAC_DHCP = "020000000001"
+
+
+def _entry(hass, host="1.2.3.4", mac=DISCOVERY_MAC):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=mac,
+        data={CONF_HOST: host, CONF_MAC: mac, CONF_TOKEN: "tok",
+              CONF_MODEL: "QE65LS03BAUXXH"},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_dhcp_discovery_updates_host_of_existing_entry(hass):
+    """A known MAC seen at a new address repairs the entry instead of stranding it."""
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+    entry = _entry(hass, host="1.2.3.4")
+    with patch(
+        "custom_components.samsung_tv_frame.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "dhcp"},
+            data=DhcpServiceInfo(
+                ip="5.6.7.8", hostname="samsung-tv", macaddress=DISCOVERY_MAC_DHCP
+            ),
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == "5.6.7.8"
+
+
+async def test_dhcp_discovery_does_not_touch_a_different_tv(hass):
+    """A different MAC must never rewrite an existing entry's host."""
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+    entry = _entry(hass, host="1.2.3.4")
+    with patch(
+        "custom_components.samsung_tv_frame.async_setup_entry", return_value=True
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "dhcp"},
+            data=DhcpServiceInfo(
+                ip="5.6.7.8", hostname="samsung-tv", macaddress="020000000099"
+            ),
+        )
+        await hass.async_block_till_done()
+
+    assert entry.data[CONF_HOST] == "1.2.3.4"
+
+
+async def test_dhcp_discovery_of_new_tv_prefills_the_host(hass):
+    """An unknown TV offers the discovered address rather than an empty box."""
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "dhcp"},
+        data=DhcpServiceInfo(
+            ip="5.6.7.8", hostname="samsung-tv", macaddress=DISCOVERY_MAC_DHCP
+        ),
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+    # the discovered address is offered as the default
+    assert any(
+        getattr(key, "default", None) and key.default() == "5.6.7.8"
+        for key in result["data_schema"].schema
+    )
+
+
+async def test_ssdp_discovery_updates_host_of_existing_entry(hass):
+    """SSDP carries no MAC, so the host is confirmed via REST before matching."""
+    from homeassistant.helpers.service_info.ssdp import SsdpServiceInfo
+
+    entry = _entry(hass, host="1.2.3.4")
+    with patch(
+        "custom_components.samsung_tv_frame.config_flow.async_discover_identity",
+        new=AsyncMock(return_value=DISCOVERY_MAC),
+    ), patch(
+        "custom_components.samsung_tv_frame.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "ssdp"},
+            data=SsdpServiceInfo(
+                ssdp_usn="uuid:x", ssdp_st="urn:x",
+                ssdp_location="http://5.6.7.8:9197/dmr", upnp={},
+            ),
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert entry.data[CONF_HOST] == "5.6.7.8"
+
+
+async def test_ssdp_discovery_aborts_when_device_is_not_a_frame(hass):
+    """A non-Frame Samsung device on the LAN must not start a usable flow."""
+    from homeassistant.helpers.service_info.ssdp import SsdpServiceInfo
+
+    with patch(
+        "custom_components.samsung_tv_frame.config_flow.async_discover_identity",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "ssdp"},
+            data=SsdpServiceInfo(
+                ssdp_usn="uuid:x", ssdp_st="urn:x",
+                ssdp_location="http://5.6.7.8:9197/dmr", upnp={},
+            ),
+        )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "not_a_frame"

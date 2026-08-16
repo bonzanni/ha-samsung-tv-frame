@@ -64,6 +64,10 @@ OFF_DEBOUNCE_COUNT = 2
 # last-stable and reports unknown (a permanently dead art channel must not
 # freeze state forever).
 ART_FAIL_UNKNOWN_COUNT = 6
+
+# get_artmode_status reports a third value while the art menu is on screen.
+# Confirmed live on this model. It means "cannot tell", not "not art mode".
+ART_MODE_NAV = "nav"
 # Consecutive failed UPnP volume reads (TV on) before warning once.
 UPNP_FAIL_WARN_COUNT = 6
 # Art transport deadlines.

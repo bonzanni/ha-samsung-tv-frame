@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **FIX:** the art menu no longer reports the TV as watching. Besides `on` and
+  `off`, this firmware's `get_artmode_status` returns `nav` while the art menu
+  is on screen. Both the poll path and the push path collapsed that to `False`,
+  so opening a menu published `tv_mode: watching` and fired the
+  `started_watching` device trigger for a TV that never left art mode. `nav` now
+  means *indeterminate*: the coordinator holds its last stable reading. A real
+  art-to-watching transition is unaffected, which is pinned by its own test.
+- **FIX:** DHCP and SSDP discovery now reconcile against the existing entry.
+  The manifest declared both matchers but the flow relied on Home Assistant's
+  base steps, which only fall through to the manual step — so a TV that changed
+  address was never repaired. Since `reachable` is a single-signal oracle over
+  the REST port, a stale address made the TV read as permanently off with no
+  recovery path. A DHCP sighting of the known MAC, or an SSDP sighting whose
+  identity is confirmed over REST, now updates the stored host in place. An
+  unknown TV gets its discovered address pre-filled, and a discovered device
+  that is not a Frame aborts instead of offering setup.
+
+### Investigated, no change
+
+- `set_favourite` was suspected of waiting for a sub-event this firmware never
+  sends, timing out and retiring the art session on every call. **Probed live
+  and falsified:** the TV does emit `favorite_changed`, valid calls complete in
+  ~0.15 s, and a bad `content_id` returns a correlated `ResponseError` with
+  error code `-7`. The expectation is inherited from `samsungtvws`, and it is
+  correct for this model. No change made.
+
 - Tooling only; no runtime behavior change. Ruff has been failing on `main`
   since 0.8.0 through no code fault: `astral-sh/ruff-action` installs the newest
   ruff on every run, so the rule set changed underneath the repo. Pin ruff to

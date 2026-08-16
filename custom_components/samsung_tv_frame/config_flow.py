@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
 from homeassistant.config_entries import (
@@ -12,9 +13,11 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlowWithReload,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+from homeassistant.helpers.service_info.ssdp import SsdpServiceInfo
 from samsungtvws.helper import get_ssl_context
 from websockets.protocol import State
 
@@ -163,15 +166,84 @@ async def validate_and_pair(hass, host: str) -> dict[str, Any]:
     }
 
 
+async def async_discover_identity(hass: HomeAssistant, host: str) -> str | None:
+    """Return the formatted MAC if `host` is a Frame TV, else None.
+
+    Discovery-only helper: it must never pair, because the TV's Allow prompt
+    cannot be answered by a background flow (and does not render over Art Mode
+    at all). One cheap REST read is enough to identify the device.
+    """
+    session = async_get_clientsession(hass)
+    rest = PrivacySafeSamsungTVAsyncRest(
+        host, session=session, port=PORT_REST, timeout=8
+    )
+    try:
+        info = (await rest.rest_device_info()) or {}
+    except Exception:  # noqa: BLE001 - an unreachable or noisy device is simply not ours
+        return None
+    device = info.get("device", {})
+    if device.get("FrameTVSupport") != "true":
+        return None
+    mac = device.get("wifiMac")
+    return format_mac(mac) if mac else None
+
+
 class SamsungFrameConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the Samsung Frame TV config flow."""
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        self._discovered_host: str | None = None
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> FrameOptionsFlow:
         return FrameOptionsFlow()
+
+    async def async_step_dhcp(
+        self, discovery_info: DhcpServiceInfo
+    ) -> ConfigFlowResult:
+        """Reconcile a DHCP sighting against the known TV.
+
+        Home Assistant's base implementation only falls through to the user
+        step, so a TV that changes address is never repaired. `reachable` is a
+        single-signal oracle over the REST port, so a stale address makes the
+        TV read as permanently off with no recovery path. DHCP carries the MAC
+        natively, which is exactly the identity this entry is keyed on.
+        """
+        return await self._async_handle_discovery(
+            format_mac(discovery_info.macaddress), discovery_info.ip
+        )
+
+    async def async_step_ssdp(
+        self, discovery_info: SsdpServiceInfo
+    ) -> ConfigFlowResult:
+        """Reconcile an SSDP sighting, resolving identity over REST.
+
+        SSDP carries no MAC, so the advertised location only yields a host; the
+        TV itself is asked who it is. This also filters the manifest's broad
+        Samsung matcher down to actual Frames.
+        """
+        host = urlparse(discovery_info.ssdp_location or "").hostname
+        if not host:
+            return self.async_abort(reason="cannot_connect")
+        mac = await async_discover_identity(self.hass, host)
+        if mac is None:
+            return self.async_abort(reason="not_a_frame")
+        return await self._async_handle_discovery(mac, host)
+
+    async def _async_handle_discovery(
+        self, mac: str, host: str
+    ) -> ConfigFlowResult:
+        """Update a known TV's address, or offer setup for a new one."""
+        await self.async_set_unique_id(mac)
+        # Repairs the address of an existing entry and aborts; for an unknown
+        # TV it is a no-op and the user step runs with the address pre-filled.
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        self._discovered_host = host
+        self.context["title_placeholders"] = {"name": host}
+        return await self.async_step_user()
 
     async def async_step_reauth(
         self, user_input: dict[str, Any] | None = None
@@ -258,9 +330,14 @@ class SamsungFrameConfigFlow(ConfigFlow, domain=DOMAIN):
                     title=paired[CONF_MODEL] or "Samsung Frame TV",
                     data={CONF_HOST: user_input[CONF_HOST], **paired},
                 )
+        host_field = (
+            vol.Required(CONF_HOST, default=self._discovered_host)
+            if self._discovered_host
+            else vol.Required(CONF_HOST)
+        )
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_HOST): str}),
+            data_schema=vol.Schema({host_field: str}),
             errors=errors,
         )
 

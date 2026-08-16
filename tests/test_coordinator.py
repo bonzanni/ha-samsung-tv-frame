@@ -2012,3 +2012,44 @@ async def test_art_event_go_to_standby_holds_but_refreshes(hass, mock_device):
             await hass.async_block_till_done()
         # ...but it must trigger an immediate poll to resolve OFF fast.
         refresh.assert_awaited_once()
+
+
+async def test_art_event_nav_does_not_flip_to_watching(hass, mock_device):
+    """A pushed "nav" (art menu opened) must not publish WATCHING.
+
+    This is the push-path twin of the poll-path fix: opening the art menu on the
+    TV emits art_mode_changed with value "nav", and mapping that to False fired
+    started_watching at automations for a TV that never left art mode.
+    """
+    coord = _make(hass, mock_device)
+    coord.data = FrameData(
+        reachable=True,
+        power_state="on",
+        art_mode=True,
+        tv_mode=TvMode.ART_MODE,
+        current_art=None,
+    )
+    coord.handle_art_event(
+        "d2d_service_message",
+        {"event": "art_mode_changed", "value": "nav"},
+    )
+    assert coord.data.tv_mode is TvMode.ART_MODE
+    assert coord.data.art_mode is True
+
+
+async def test_art_event_off_still_flips_to_watching(hass, mock_device):
+    """The nav fix must not blunt a real art->watching transition."""
+    coord = _make(hass, mock_device)
+    coord.data = FrameData(
+        reachable=True,
+        power_state="on",
+        art_mode=True,
+        tv_mode=TvMode.ART_MODE,
+        current_art=None,
+    )
+    coord.handle_art_event(
+        "d2d_service_message",
+        {"event": "art_mode_changed", "value": "off"},
+    )
+    assert coord.data.tv_mode is TvMode.WATCHING
+    assert coord.data.art_mode is False

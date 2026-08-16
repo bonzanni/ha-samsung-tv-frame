@@ -24,7 +24,9 @@
       "already_configured": "This TV is already configured.",
       "reauth_successful": "Reauthorization was successful.",
       "unique_id_mismatch": "The device at this address is a different TV.",
-      "reconfigure_successful": "Reconfiguration was successful."
+      "reconfigure_successful": "Reconfiguration was successful.",
+      "not_a_frame": "The discovered device is not a Frame TV.",
+      "cannot_connect": "Could not reach the discovered device."
     }
   },
   "options": {
