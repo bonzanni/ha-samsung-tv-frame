@@ -519,11 +519,16 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             mode = self._last_stable()
         if mode is TvMode.OFF:
             self.device.remote_confirmed = False
-        base = current or FrameData(True, power_state, self._art_mode, mode)
+        # reachable is deliberately NOT set here. It means "the REST heartbeat
+        # answered", it is what the OFF derivation and the connection signal
+        # are built on, and an art push is evidence about a different channel:
+        # claiming contact from it would report a TV whose REST port has gone
+        # quiet as reachable, and would flap on every pushed artwork change.
+        # derive_tv_mode above still takes the push as proof the TV is alive.
+        base = current or FrameData(False, power_state, self._art_mode, mode)
         self.async_set_updated_data(
             replace(
                 base,
-                reachable=True,
                 power_state=power_state,
                 art_mode=self._art_mode,
                 tv_mode=mode,

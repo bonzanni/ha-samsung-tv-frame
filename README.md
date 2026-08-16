@@ -35,6 +35,14 @@ To remove it, delete the config entry, then delete the
   `num_repeats` / `delay_secs` / `hold_secs` support.
 - `binary_sensor.samsung_frame_tv_art_mode` — art mode on/off
 - `sensor.samsung_frame_tv_tv_mode` — `off` / `watching` / `art_mode` (use this in automations)
+- `binary_sensor.samsung_frame_tv_connection` — whether the TV answered the integration's
+  heartbeat. **Connected** means the TV replied on its REST port; it does not mean the panel
+  is lit. **Disconnected** does not tell you *why*: a powered-off TV, a TV whose panel has
+  gone to sleep, a Wi-Fi outage and an address change all look identical from the network.
+  Everything else in this integration reports an unreachable TV as `off`, which is usually
+  right and occasionally not — this entity is how you tell that inference apart from a fact,
+  and it pairs with the `lost_contact` / `regained_contact` device triggers. Undebounced, so
+  use `for:` in automations if you want to ignore brief drops.
 - `switch.samsung_frame_tv_art_mode_switch` — the clickable art ⇄ watching toggle
   (unavailable while the TV is off)
 - `sensor.samsung_frame_tv_current_art` — content id of the artwork currently selected

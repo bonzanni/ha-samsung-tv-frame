@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- **NEW:** `binary_sensor.<tv>_connection` (connectivity, diagnostic) plus
+  `lost_contact` / `regained_contact` device triggers. Until now nothing
+  anywhere distinguished *"the TV says it is off"* from *"we cannot see the
+  TV"*: an unreachable TV produces a **successful** poll that publishes
+  `tv_mode: off` with every entity still available, so a Wi-Fi outage, an
+  address change, a crashed Tizen and a sleeping panel were all indistinguishable
+  from a power-off, and no automation could be written on lost contact at all.
+  The new entity reports exactly one fact — whether the TV answered the REST
+  heartbeat — undebounced, so brief outages are visible (use `for:` to ignore
+  them). Deliberately additive: `tv_mode`, `media_player` and the art-mode
+  sensor behave exactly as before, and `media_player` stays available while the
+  TV is unreachable because Wake-on-LAN is the only way back.
+- **FIX:** an art push event no longer claims the TV is reachable. The push path
+  overwrote `reachable` with a hardcoded `True`, so an unsolicited artwork
+  change would have reported contact on a TV whose REST port had gone quiet.
+  `reachable` is now owned by the heartbeat alone; the push is still treated as
+  evidence the TV is alive when deriving the mode.
+- **FIX:** `delete_art` no longer reports success when the TV did not confirm.
+  The library validates that the TV echoed the deleted content id back and
+  returns a bool; the device layer threw it away and the service always reported
+  success. Confirmed live first: a real delete echoes the requested list back,
+  and an absent or malformed content id draws a correlated error — so an
+  unconfirmed answer is now surfaced as a failure rather than silently trusted.
+- **FIX:** `set_slideshow` no longer guesses a command this firmware answers
+  with silence. The write reached the legacy setter only once the dialect had
+  been learned; on a fresh art generation (and after any reconnect) it fell
+  through to `set_auto_rotation_status`, measured on this TV as a **total
+  silence** — no response in 25 s and none in a further 45 s of listening.
+  Production sends it on the 20 s deadline, which closes the websocket and
+  retires the art session, taking every art entity unavailable. An unlearned
+  dialect is now discovered with the bounded read probes, which cannot close the
+  socket, and a TV that answers no slideshow dialect gets a clear error.
+
 - **FIX:** the art menu no longer reports the TV as watching. Besides `on` and
   `off`, this firmware's `get_artmode_status` returns `nav` while the art menu
   is on screen. Both the poll path and the push path collapsed that to `False`,

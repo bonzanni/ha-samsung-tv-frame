@@ -2037,6 +2037,42 @@ async def test_art_event_nav_does_not_flip_to_watching(hass, mock_device):
     assert coord.data.art_mode is True
 
 
+async def test_art_push_does_not_claim_rest_contact(hass, mock_device):
+    """Only the heartbeat may say the TV is reachable.
+
+    `reachable` means one REST answer on port 8001, and it is what the OFF
+    derivation is built on. An art push proves the websocket is alive, which
+    is a different fact: letting it rewrite `reachable` would report contact
+    on a TV whose REST port has stopped answering, and would flap the
+    connection signal on every slideshow rotation.
+    """
+    coord = _make(hass, mock_device)
+    coord.data = FrameData(
+        reachable=False,
+        power_state="on",
+        art_mode=False,
+        tv_mode=TvMode.WATCHING,
+        current_art=None,
+    )
+
+    coord.handle_art_event(
+        "d2d_service_message",
+        {"event": "art_mode_changed", "value": "on"},
+    )
+
+    assert coord.data.reachable is False
+    # The mode derivation still treats the push as evidence the TV is alive.
+    assert coord.data.tv_mode is TvMode.ART_MODE
+
+
+async def test_poll_owns_reachable_in_both_directions(hass, mock_device):
+    coord = _make(hass, mock_device)
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    assert (await coord._async_update_data()).reachable is True
+    mock_device.async_device_info.return_value = None
+    assert (await coord._async_update_data()).reachable is False
+
+
 async def test_art_event_off_still_flips_to_watching(hass, mock_device):
     """The nav fix must not blunt a real art->watching transition."""
     coord = _make(hass, mock_device)
