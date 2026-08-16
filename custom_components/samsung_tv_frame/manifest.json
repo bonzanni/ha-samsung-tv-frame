@@ -3,7 +3,7 @@
   "name": "Samsung Frame TV",
   "codeowners": ["@bonzanni"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["ssdp"],
   "dhcp": [
     {"hostname": "samsung*"}
   ],
@@ -15,11 +15,10 @@
   "quality_scale": "silver",
   "requirements": [
     "samsungtvws[async,encrypted]==3.0.5",
-    "wakeonlan==3.3.0",
-    "async-upnp-client==0.46.2"
+    "wakeonlan==3.3.0"
   ],
   "ssdp": [
     {"manufacturer": "Samsung Electronics", "deviceType": "urn:samsung.com:device:RemoteControlReceiver:1"}
   ],
-  "version": "0.9.0"
+  "version": "0.9.1"
 }

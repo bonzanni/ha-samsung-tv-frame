@@ -1,7 +1,7 @@
 """Shared fixtures for Samsung Frame TV tests."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,6 +14,30 @@ pytest_plugins = ["pytest_homeassistant_custom_component"]
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable loading of the custom integration in every test."""
     yield
+
+
+@pytest.fixture(autouse=True)
+def silent_ssdp_scanner():
+    """Set up the ssdp dependency without emitting real SSDP traffic.
+
+    The manifest declares ``dependencies: ["ssdp"]`` so that core guarantees
+    ``async_upnp_client`` is present (see CHANGELOG 0.9.1). That makes Home
+    Assistant set up the real ssdp integration during tests, whose listeners
+    and UPnP servers open multicast sockets that pytest-socket blocks at
+    teardown. Patch them out, mirroring core's own fixture of the same name.
+    """
+    with (
+        patch(
+            "homeassistant.components.ssdp.scanner.Scanner._async_start_ssdp_listeners"
+        ),
+        patch(
+            "homeassistant.components.ssdp.scanner.Scanner._async_stop_ssdp_listeners"
+        ),
+        patch("homeassistant.components.ssdp.scanner.Scanner.async_scan"),
+        patch("homeassistant.components.ssdp.server.Server._async_start_upnp_servers"),
+        patch("homeassistant.components.ssdp.server.Server._async_stop_upnp_servers"),
+    ):
+        yield
 
 
 @pytest.fixture
