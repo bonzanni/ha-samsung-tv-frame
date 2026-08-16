@@ -2687,3 +2687,21 @@ async def test_turn_off_always_invalidates_remote_confirmation(
             await device.async_turn_off()
 
     assert device.remote_confirmed is False
+
+
+# --- Art menu ("nav") -------------------------------------------------------
+# get_artmode_status returns a third value on this model: "nav", meaning the art
+# menu is on screen. Mapping it to False published WATCHING and fired the
+# started_watching device trigger just because someone opened a menu. It is
+# indeterminate, not "not art", so the coordinator must hold its last stable
+# reading rather than assert the opposite one.
+
+async def test_get_artmode_off_is_false(hass, device):
+    device._art.get_artmode = AsyncMock(return_value="off")
+    assert await device.async_get_artmode() is False
+
+
+async def test_get_artmode_nav_is_indeterminate(hass, device):
+    """The art menu must not be reported as "not art mode"."""
+    device._art.get_artmode = AsyncMock(return_value="nav")
+    assert await device.async_get_artmode() is None

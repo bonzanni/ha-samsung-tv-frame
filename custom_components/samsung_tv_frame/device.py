@@ -29,6 +29,7 @@ from .art_session import (
 )
 from .art_settings import normalize_art_setting, parse_art_settings, parse_slideshow
 from .const import (
+    ART_MODE_NAV,
     DOMAIN,
     LOGGER,
     PORT_REST,
@@ -395,9 +396,15 @@ class FrameDevice:
             raise
 
     async def async_get_artmode(self) -> bool | None:
-        """Return Art Mode state without opening or retrying the session."""
+        """Return Art Mode state, or None when the TV cannot tell us.
+
+        Besides "on" and "off" this firmware reports "nav" while the art menu
+        is on screen. Collapsing that to False published WATCHING and fired the
+        started_watching trigger for a TV that never left art mode, so it maps
+        to None and the coordinator keeps its last stable reading instead.
+        """
         value = await self._async_art_read(self._art.get_artmode)
-        if value is None:
+        if value is None or value == ART_MODE_NAV:
             return None
         return value == "on"
 

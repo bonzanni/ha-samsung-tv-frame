@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .art_session import ArtSessionState
 from .const import (
     ART_FAIL_UNKNOWN_COUNT,
+    ART_MODE_NAV,
     ART_RECONCILE_SECONDS,
     CONF_TOKEN,
     DEFAULT_APP_MAP,
@@ -467,6 +468,10 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         sub = data.get("event") if isinstance(data, dict) else None
         if sub in ("art_mode_changed", "artmode_status"):
             value = data.get("value") or data.get("status")
+            if value == ART_MODE_NAV:
+                # The art menu is on screen: indeterminate, not "not art".
+                # Keep the last stable reading rather than publish WATCHING.
+                return
             self._art_mode = value == "on"
             self._art_mode_revision += 1
             if self._art_mode and self._latest_rest_power_state == "on":
