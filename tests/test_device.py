@@ -18,7 +18,10 @@ from custom_components.samsung_tv_frame.art_session import (
     ArtSessionTrigger,
 )
 from custom_components.samsung_tv_frame.device import FrameDevice
-from custom_components.samsung_tv_frame.frame_art import ArtProbeTimeout
+from custom_components.samsung_tv_frame.frame_art import (
+    ArtProbeTimeout,
+    UnsupportedArtCommandError,
+)
 from custom_components.samsung_tv_frame.frame_remote import (
     FrameRemote,
     RemotePairingRequired,
@@ -1203,7 +1206,11 @@ async def test_art_getters_return_none_without_opening_after_stop(
         ("async_set_photo_filter", ("MY_F0001", "ink"), "set_photo_filter"),
         ("async_set_favourite", ("MY_F0001", True), "set_favourite"),
         ("async_set_color_temperature", (4,), "set_color_temperature"),
-        ("async_set_slideshow", (60, False, "MY-C0002"), "set_slideshow"),
+        (
+            "async_set_slideshow",
+            (60, False, "MY-C0002"),
+            "set_legacy_slideshow",
+        ),
         ("async_set_motion_timer", ("15",), "set_motion_timer"),
         (
             "async_set_motion_sensitivity",
@@ -1323,7 +1330,7 @@ async def test_user_mutation_response_error_keeps_session_ready(device):
         (
             "async_set_slideshow",
             (60, False, "MY-C0002"),
-            "set_slideshow",
+            "set_legacy_slideshow",
             (60, False, "MY-C0002"),
         ),
         (
@@ -1353,10 +1360,11 @@ async def test_all_art_mutations_ensure_user_and_execute_once(
     setattr(device._art, delegate, operation)
     other_slideshow_operations = []
     if method == "async_set_slideshow":
-        for other_delegate in (
-            "set_auto_rotation",
-            "set_legacy_slideshow",
-        ):
+        # Pin the learned dialect so this test exercises the write, not the
+        # dialect discovery covered by its own tests.
+        device._optional_dialect_generation = device.art_generation
+        device._slideshow_dialect = device._slideshow_dialect.__class__.LEGACY
+        for other_delegate in ("set_auto_rotation",):
             other_operation = AsyncMock()
             setattr(device._art, other_delegate, other_operation)
             other_slideshow_operations.append(other_operation)
@@ -1390,7 +1398,7 @@ async def test_all_art_mutations_ensure_user_and_execute_once(
         (
             "async_set_slideshow",
             (60, False, "MY-C0002"),
-            "set_slideshow",
+            "set_legacy_slideshow",
         ),
         ("async_set_motion_timer", ("15",), "set_motion_timer"),
         (
@@ -2409,13 +2417,26 @@ async def test_launch_app_emits_channel_command(hass, device):
     assert cmds[0].params["data"]["appId"] == "11101200001"
 
 
+@pytest.mark.parametrize("confirmed", [True, False])
+async def test_delete_art_reports_the_tv_confirmation(device, confirmed):
+    """The delete verification must reach the caller, not be discarded.
+
+    Live 2026-08-16 on QE65LS03B: a real delete answers `delete_image_list`
+    with `content_id_list` as a JSON *string* that parses to exactly the
+    requested list, so the echo check is True on success; an absent or
+    malformed content id draws a correlated ResponseError in 0.02 s. A False
+    result is therefore an answer that confirmed nothing.
+    """
+    device._art.delete = AsyncMock(return_value=confirmed)
+
+    assert await device.async_delete_art("MY_F0001") is confirmed
+
+
 @pytest.mark.parametrize(
     ("dialect_name", "expected_delegate"),
     [
         ("LEGACY", "set_legacy_slideshow"),
         ("AUTO_ROTATION", "set_auto_rotation"),
-        ("UNKNOWN", "set_slideshow"),
-        ("UNSUPPORTED", "set_slideshow"),
     ],
 )
 async def test_slideshow_write_routes_dialect_without_cache_write(
@@ -2427,18 +2448,13 @@ async def test_slideshow_write_routes_dialect_without_cache_write(
     device._slideshow_dialect = expected_dialect
     device._art.set_auto_rotation = AsyncMock()
     device._art.set_legacy_slideshow = AsyncMock()
-    device._art.set_slideshow = AsyncMock()
 
     await device.async_set_slideshow(60, True, "MY-C0002")
 
     getattr(device._art, expected_delegate).assert_awaited_once_with(
         60, True, "MY-C0002"
     )
-    for delegate in (
-        "set_auto_rotation",
-        "set_legacy_slideshow",
-        "set_slideshow",
-    ):
+    for delegate in ("set_auto_rotation", "set_legacy_slideshow"):
         if delegate != expected_delegate:
             getattr(device._art, delegate).assert_not_awaited()
     assert device._slideshow_dialect is expected_dialect
@@ -2447,22 +2463,101 @@ async def test_slideshow_write_routes_dialect_without_cache_write(
     )
 
 
+async def test_unknown_slideshow_dialect_is_read_probed_before_writing(device):
+    """A write on an unlearned dialect must never guess the modern command.
+
+    Live 2026-08-16 on QE65LS03B (`api_version` 4.3.4.0):
+    `set_auto_rotation_status` sent with the values the TV already held drew
+    no correlated frame in 25 s and no frame at all in a further 45 s of
+    listening, while `get_slideshow_status` answered in under a second before
+    and after. Production sends that write on the 20 s non-probe deadline, so
+    guessing it closes the websocket and retires the Art generation. The
+    read probes are bounded at 5 s and never close the socket.
+    """
+    device._art.get_auto_rotation_status = AsyncMock(
+        side_effect=ArtProbeTimeout()
+    )
+    device._art.get_legacy_slideshow_status = AsyncMock(
+        return_value=LEGACY_SLIDESHOW_PAYLOAD
+    )
+    device._art.set_auto_rotation = AsyncMock()
+    device._art.set_legacy_slideshow = AsyncMock()
+
+    await device.async_set_slideshow(60, True, "MY-C0002")
+
+    device._art.set_legacy_slideshow.assert_awaited_once_with(
+        60, True, "MY-C0002"
+    )
+    device._art.set_auto_rotation.assert_not_awaited()
+    assert device._slideshow_dialect.value == "legacy"
+    device._art_session.async_connection_failed.assert_not_awaited()
+
+
+async def test_unknown_slideshow_dialect_learned_as_modern_writes_modern(
+    device,
+):
+    device._art.get_auto_rotation_status = AsyncMock(
+        return_value=MODERN_SLIDESHOW_PAYLOAD
+    )
+    device._art.set_auto_rotation = AsyncMock()
+    device._art.set_legacy_slideshow = AsyncMock()
+
+    await device.async_set_slideshow(60, True, "MY-C0002")
+
+    device._art.set_auto_rotation.assert_awaited_once_with(
+        60, True, "MY-C0002"
+    )
+    device._art.set_legacy_slideshow.assert_not_awaited()
+    assert device._slideshow_dialect.value == "auto_rotation"
+
+
+@pytest.mark.parametrize("dialect_name", ["UNKNOWN", "UNSUPPORTED"])
+async def test_slideshow_write_refuses_when_no_dialect_answers(
+    device, dialect_name
+):
+    """No slideshow dialect means a clean failure, never a blind write."""
+    dialect_type = device._slideshow_dialect.__class__
+    device._optional_dialect_generation = device.art_generation
+    device._slideshow_dialect = getattr(dialect_type, dialect_name)
+    device._art.get_auto_rotation_status = AsyncMock(
+        side_effect=ResponseError("unsupported")
+    )
+    device._art.get_legacy_slideshow_status = AsyncMock(
+        side_effect=ResponseError("unsupported")
+    )
+    device._art.set_auto_rotation = AsyncMock()
+    device._art.set_legacy_slideshow = AsyncMock()
+
+    with pytest.raises(UnsupportedArtCommandError):
+        await device.async_set_slideshow(60, True, "MY-C0002")
+
+    device._art.set_auto_rotation.assert_not_awaited()
+    device._art.set_legacy_slideshow.assert_not_awaited()
+    device._art_session.async_connection_failed.assert_not_awaited()
+
+
 async def test_slideshow_write_does_not_reuse_previous_generation_dialect(
     device,
 ):
     dialect_type = device._slideshow_dialect.__class__
     device._optional_dialect_generation = device.art_generation - 1
-    device._slideshow_dialect = dialect_type.LEGACY
-    device._art.set_slideshow = AsyncMock()
+    device._slideshow_dialect = dialect_type.AUTO_ROTATION
+    device._art.get_auto_rotation_status = AsyncMock(
+        side_effect=ArtProbeTimeout()
+    )
+    device._art.get_legacy_slideshow_status = AsyncMock(
+        return_value=LEGACY_SLIDESHOW_PAYLOAD
+    )
+    device._art.set_auto_rotation = AsyncMock()
     device._art.set_legacy_slideshow = AsyncMock()
 
     await device.async_set_slideshow(60, False, "MY-C0002")
 
-    device._art.set_slideshow.assert_awaited_once_with(
+    device._art.set_legacy_slideshow.assert_awaited_once_with(
         60, False, "MY-C0002"
     )
-    device._art.set_legacy_slideshow.assert_not_awaited()
-    assert device._slideshow_dialect is dialect_type.UNKNOWN
+    device._art.set_auto_rotation.assert_not_awaited()
+    assert device._slideshow_dialect is dialect_type.LEGACY
     device._art_session.async_ensure_ready.assert_awaited_once_with(
         ArtSessionTrigger.USER
     )

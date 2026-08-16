@@ -70,6 +70,10 @@ class InvalidArtSettingError(ValueError):
     """A local Art setting value is outside its supported domain."""
 
 
+class UnsupportedArtCommandError(Exception):
+    """This TV answers no dialect of the requested optional Art command."""
+
+
 @dataclass(slots=True)
 class _PendingResponse:
     """A response waiter registered with the receiver."""
@@ -538,19 +542,6 @@ class FrameArt(SamsungTVWSAsyncConnection):
             "set_slideshow_status",
             **self._slideshow_params(duration, shuffle, category_id),
         )
-
-    async def set_slideshow(
-        self, duration: int, shuffle: bool, category_id: str
-    ) -> dict[str, Any]:
-        """Configure slideshow playback, with the legacy command fallback."""
-        try:
-            return await self.set_auto_rotation(
-                duration, shuffle, category_id
-            )
-        except ResponseError:
-            return await self.set_legacy_slideshow(
-                duration, shuffle, category_id
-            )
 
     async def _open_d2d(
         self, conn_info: dict[str, Any]

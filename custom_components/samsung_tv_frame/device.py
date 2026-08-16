@@ -43,6 +43,7 @@ from .frame_art import (
     FrameArt,
     InvalidArtSettingError,
     TaskFactory,
+    UnsupportedArtCommandError,
 )
 from .frame_remote import FrameRemote, RemotePairingRequired
 from .models import ArtSettingKey, ArtSettingsSnapshot, SlideshowState
@@ -389,7 +390,13 @@ class FrameDevice:
             raise ConnectionFailure("Art session is unavailable")
         try:
             return await operation()
-        except (ResponseError, InvalidArtSettingError):
+        except (
+            ResponseError,
+            InvalidArtSettingError,
+            UnsupportedArtCommandError,
+        ):
+            # Refusals decided from evidence, not transport failures: the
+            # session stays exactly as healthy as it was.
             raise
         except Exception as err:
             await self._art_session.async_connection_failed(err)
@@ -558,8 +565,14 @@ class FrameDevice:
             lambda: self._art.upload(data, file_type, matte)
         )
 
-    async def async_delete_art(self, content_id: str) -> None:
-        await self._async_art_mutation(
+    async def async_delete_art(self, content_id: str) -> bool:
+        """Delete an artwork; return whether the TV confirmed the deletion.
+
+        The TV echoes the deleted content id back, so an answer that fails
+        that check deleted nothing this integration can point to. Callers must
+        not report an unconfirmed delete as success.
+        """
+        return await self._async_art_mutation(
             lambda: self._art.delete(content_id)
         )
 
@@ -599,12 +612,22 @@ class FrameDevice:
     async def async_set_slideshow(
         self, duration: int, shuffle: bool, category_id: str
     ) -> None:
-        """Configure slideshow using this generation's read-proven dialect."""
+        """Configure slideshow using this generation's read-proven dialect.
+
+        A slideshow write is only ever sent in a dialect this generation has
+        already seen the TV answer. Guessing is not an option: on this Frame
+        firmware `set_auto_rotation_status` is answered with silence, and a
+        silent write on the 20 s non-probe deadline closes the websocket and
+        retires the Art generation. The read probes cost 5 s each and cannot
+        close the socket, so an unlearned dialect is discovered, not assumed.
+        """
 
         async def _set() -> None:
             self._reset_optional_dialects_for_generation(
                 self.art_generation
             )
+            if self._slideshow_dialect is _SlideshowDialect.UNKNOWN:
+                await self.async_get_slideshow_state()
             if self._slideshow_dialect is _SlideshowDialect.LEGACY:
                 await self._art.set_legacy_slideshow(
                     duration, shuffle, category_id
@@ -615,7 +638,9 @@ class FrameDevice:
                     duration, shuffle, category_id
                 )
                 return
-            await self._art.set_slideshow(duration, shuffle, category_id)
+            raise UnsupportedArtCommandError(
+                "This TV answered no slideshow command"
+            )
 
         await self._async_art_mutation(_set)
 

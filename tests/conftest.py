@@ -83,7 +83,7 @@ def mock_device() -> MagicMock:
     device.async_set_favourite = AsyncMock()
     device.async_set_color_temperature = AsyncMock()
     device.async_upload_art = AsyncMock(return_value="MY_F9999")
-    device.async_delete_art = AsyncMock()
+    device.async_delete_art = AsyncMock(return_value=True)
     device.async_set_slideshow = AsyncMock()
     device.async_set_motion_timer = AsyncMock()
     device.async_set_motion_sensitivity = AsyncMock()
