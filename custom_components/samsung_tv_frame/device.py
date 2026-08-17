@@ -143,6 +143,11 @@ class FrameDevice:
         return self._art_session.generation
 
     @property
+    def art_host_unavailable(self) -> bool:
+        """Whether the TV's Art channel is answering without an Art host."""
+        return self._art_session.host_unavailable
+
+    @property
     def art_session_state(self) -> ArtSessionState:
         """Return the supervised Art lifecycle state."""
         return self._art_session.state

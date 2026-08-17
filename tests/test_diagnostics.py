@@ -177,6 +177,7 @@ async def test_loaded_diagnostics_exact_allowlist_privacy_and_zero_io(
         "art_mode_known": True,
         "art_session_state": "ready",
         "art_session_ready": True,
+        "art_host_unavailable": False,
         "art_session_generation": 12,
         "art_failures": 2,
         "upnp_failures": 3,

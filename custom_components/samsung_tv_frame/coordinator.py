@@ -9,6 +9,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .art_session import ArtSessionState
@@ -75,6 +76,8 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         self._was_reachable = True
         self._wake_task: asyncio.Task | None = None
         self._art_ready_refresh_task: asyncio.Task | None = None
+        self._art_service_repair_raised = False
+        self._art_service_repair_synced = False
         self._standby_refresh_task: asyncio.Task | None = None
         # Consecutive polls (reachable, power on) with a failed art query;
         # bounds the last-stable hold so a permanently broken art channel
@@ -108,6 +111,7 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             "art_mode_known": data.art_mode is not None,
             "art_session_state": self.device.art_session_state.value,
             "art_session_ready": self.device.art_ready,
+            "art_host_unavailable": self.device.art_host_unavailable,
             "art_session_generation": generation,
             "art_failures": self._art_fail_streak,
             "upnp_failures": self._upnp_fail_streak,
@@ -123,6 +127,51 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             ),
             "remote_confirmed": self.device.remote_confirmed,
         }
+
+    def _update_art_service_repair(self, unavailable: bool) -> None:
+        """Raise or clear the repair for an Art service with no host.
+
+        Repairs are for user-actionable faults, which is why the lost-contact
+        design rejected one for "the TV is off". This is the opposite case: a
+        specific physical action fixes it, nothing else measured does, and the
+        action is not guessable from the symptom (every Art entity going
+        unavailable while the panel happily shows artwork).
+        """
+        # Edge-driven after the first call, but the first call always
+        # reconciles: an in-memory flag cannot know what is already in the
+        # issue registry, and a stale "go and unplug your TV" is exactly the
+        # notification that must not be left standing.
+        if (
+            unavailable == self._art_service_repair_raised
+            and self._art_service_repair_synced
+        ):
+            return
+        self._art_service_repair_synced = True
+        self._art_service_repair_raised = unavailable
+        issue_id = f"art_service_unavailable_{self.config_entry.entry_id}"
+        if unavailable:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="art_service_unavailable",
+                translation_placeholders={
+                    "name": self.config_entry.title,
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    @callback
+    def clear_art_service_repair(self) -> None:
+        """Drop the repair at unload, so it cannot outlive its owner.
+
+        Nothing polls the TV once the entry is gone, so a raised issue would
+        become permanent and unactionable.
+        """
+        self._update_art_service_repair(False)
 
     def _last_stable(self) -> TvMode:
         if self.data is not None and self.data.tv_mode is not TvMode.UNKNOWN:
@@ -258,8 +307,17 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         published_slideshow = (
             self._slideshow if optional_fresh and not is_off else None
         )
+        # A wedged Art host only means something while we can see the TV: an
+        # unreachable TV fails Art for the ordinary reason, and reporting a
+        # problem there would fire the owner's recovery automation every time
+        # the TV is switched off.
+        self._update_art_service_repair(reachable and self.device.art_host_unavailable)
+
         return FrameData(
             reachable=reachable,
+            art_service_unavailable=(
+                reachable and self.device.art_host_unavailable
+            ),
             power_state=power_state,
             art_mode=False if is_off else effective_art_mode,
             tv_mode=mode,

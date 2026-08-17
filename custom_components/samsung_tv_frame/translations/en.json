@@ -40,10 +40,17 @@
       }
     }
   },
+  "issues": {
+    "art_service_unavailable": {
+      "title": "{name}: the Art service is not responding",
+      "description": "The TV is on the network and answering, and the panel may still be showing artwork, but its Art service is no longer hosting its own channel. Art mode state, artwork and Art settings are unavailable until it recovers.\n\nHome Assistant keeps retrying, but on this model no software remedy has been found to work: reconnecting, switching the TV off and on, waking it with Wake-on-LAN, and leaving and re-entering Art Mode were all measured and none of them cleared it.\n\n**To fix it: disconnect the TV from mains power for 30 seconds, then plug it back in.** This issue clears by itself once the Art service answers again."
+    }
+  },
   "entity": {
     "binary_sensor": {
       "art_mode": {"name": "Art mode"},
-      "connection": {"name": "Connection"}
+      "connection": {"name": "Connection"},
+      "art_service": {"name": "Art service"}
     },
     "image": {"current_art_image": {"name": "Current art image"}},
     "number": {
