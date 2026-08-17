@@ -348,11 +348,31 @@ async def test_get_artmode_true(hass, device):
     assert await device.async_get_artmode() is True
 
 
-async def test_turn_on_sends_magic_packet(hass, device):
+async def test_turn_on_sends_unicast_then_broadcast(hass, device):
+    """Unicast carries the wake; the broadcast covers a changed address."""
     with patch("custom_components.samsung_tv_frame.device.send_magic_packet") as smp:
         await device.async_turn_on()
-    smp.assert_called_once()
-    assert smp.call_args.args[0] == "02:00:00:00:00:01"
+
+    assert [c.args[0] for c in smp.call_args_list] == [
+        "02:00:00:00:00:01",
+        "02:00:00:00:00:01",
+    ]
+    assert [c.kwargs["ip_address"] for c in smp.call_args_list] == [
+        "1.2.3.4",
+        "255.255.255.255",
+    ]
+
+
+async def test_turn_on_broadcasts_even_when_unicast_fails(hass, device):
+    """An unresolvable or unroutable host must not cost us the broadcast."""
+    with patch(
+        "custom_components.samsung_tv_frame.device.send_magic_packet",
+        side_effect=[OSError("no route to host"), None],
+    ) as smp:
+        await device.async_turn_on()
+
+    assert smp.call_count == 2
+    assert smp.call_args_list[-1].kwargs["ip_address"] == "255.255.255.255"
 
 
 async def test_background_art_getter_returns_none_without_session_open(device):

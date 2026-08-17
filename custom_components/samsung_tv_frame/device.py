@@ -681,9 +681,30 @@ class FrameDevice:
         )
 
     async def async_turn_on(self) -> None:
-        await self._hass.async_add_executor_job(
-            lambda: send_magic_packet(self._mac, ip_address="255.255.255.255")
-        )
+        await self._hass.async_add_executor_job(self._send_magic_packets)
+
+    def _send_magic_packets(self) -> None:
+        """Wake the TV with a unicast magic packet, then a broadcast one.
+
+        A broadcast-only wake is a single unacknowledged shot: 802.11 never
+        retransmits broadcast frames, and an access point is free to drop them
+        for a station in power save — which is exactly what a sleeping TV is.
+        A unicast packet is buffered per station and retransmitted instead, and
+        it stays deliverable while the panel is off because the TV's NIC goes
+        on answering ARP. The broadcast still follows it, to cover the case
+        where the TV's address changed since we last saw it. Both go to port 9.
+
+        This is the packet pair `homeassistant/components/samsungtv` sends.
+        """
+        try:
+            send_magic_packet(self._mac, ip_address=self._host)
+        except OSError as err:
+            # A host that will not resolve or route must not cost us the
+            # broadcast, which is the arm that covers a changed address.
+            LOGGER.debug(
+                "Unicast wake packet to %s failed: %s", self._host, err
+            )
+        send_magic_packet(self._mac, ip_address="255.255.255.255")
 
     async def async_turn_off(self) -> None:
         # Single press only toggles art mode; a 3 s hold truly powers a Frame off.
