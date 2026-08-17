@@ -14,6 +14,18 @@
   them). Deliberately additive: `tv_mode`, `media_player` and the art-mode
   sensor behave exactly as before, and `media_player` stays available while the
   TV is unreachable because Wake-on-LAN is the only way back.
+- **FIX:** `turn_on` now sends the magic packet to the TV directly as well as to
+  the broadcast address. It used to send a single broadcast packet, and 802.11
+  never retransmits a broadcast frame — an access point is free to drop it for a
+  station in power save, which is exactly what a sleeping TV is. This Frame is on
+  Wi-Fi (`networkType: wireless`) and keeps answering ARP while it is off, so a
+  unicast packet is deliverable and gets the per-station buffering and
+  retransmission that a broadcast never gets. Both go out now, unicast first, and
+  a unicast that will not resolve or route no longer costs us the broadcast. This
+  is the pair Home Assistant's own `samsungtv` integration sends. Investigated
+  live before changing anything: the old packet was captured leaving the correct
+  NIC as a proper layer-2 broadcast, so the hardcoded `255.255.255.255` was never
+  the fault — see `docs/device/2026-08-17-wol-broadcast-investigation.md`.
 - **FIX:** an art push event no longer claims the TV is reachable. The push path
   overwrote `reachable` with a hardcoded `True`, so an unsolicited artwork
   change would have reported contact on a TV whose REST port had gone quiet.
