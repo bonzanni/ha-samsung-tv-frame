@@ -272,9 +272,12 @@ here, so treat it as corroboration rather than evidence.
   the only client-side behaviour that differs between the two modes, and it is the
   one candidate we could stop tomorrow — which is why the experiment below is
   still worth an evening.
-- **C — a co-resident service dies and takes the art host with it** (the owner's
-  SmartThings "TV disconnected" notices; this 2022 Frame does ship a radio-less
-  built-in SmartThings Hub sharing Tizen with the art app). **Weakened**: the
+- **C — a co-resident service dies and takes the art host with it.** The owner's
+  SmartThings "TV disconnected" notices, and — confirmed by the owner on
+  2026-08-17 — **this TV really was still acting as their SmartThings Hub**
+  throughout the three recorded failures, which on a radio-less 2022 set means a
+  resident software service sharing Tizen with the art app. Hub duty has now been
+  removed; see the natural experiment below. **Weakened as stated**, though: the
   two-`isHost` healthy signature is not special to this TV — public captures of
   other people's Frames show the same two anonymous `Smart Device` hosts
   connecting seconds apart (NickWaterton/samsung-tv-ws-api#3), and a 2019 Frame
@@ -283,6 +286,42 @@ here, so treat it as corroboration rather than evidence.
   local: no ICMP, and 8001/8002/9197/39500/8080 all refused, while ARP still held
   its MAC), so a TV that is genuinely still acting as a hub would be a broken one,
   and the "TV disconnected" notices may be nothing but art-sleep.
+
+## 2026-08-17: the hub was removed, which makes this a natural experiment
+
+On the afternoon this investigation was written, the owner checked and confirmed
+the TV **was** still acting as their SmartThings Hub, and **removed that role**.
+Recorded boundary: **2026-08-17, ~15:25 local (13:25 UTC)**, reported by the
+operator within a minute of doing it. (The TV's brief wakes at 14:06 and 14:58
+local that afternoon predate the removal and are unrelated.)
+
+That is an intervention on the one variable mechanism C names, and it converts the
+question into a before/after comparison the recorder will answer by itself:
+
+- **Before:** three viewing sessions, three failures (the table above), while the
+  TV carried hub duty — a resident service sharing Tizen with the art app on a
+  radio-less 2022 set.
+- **After:** every viewing session longer than ~45 minutes is now a trial. The
+  read-out is the same pair of signals: does `number.living_room_tv_art_brightness`
+  go `unavailable`, and does `sensor.living_room_tv_tv_mode` go `unknown`, 24–42
+  minutes into the session?
+
+**One clean failure after a long viewing session kills the hub hypothesis.** Two or
+three long sessions that survive make it the leading explanation — and would mean
+this fault had a settings-level cure all along.
+
+Honest limits, stated up front so a later reader is not misled:
+
+- It is not blinded and it is a single household. The owner knows the change was
+  made, and viewing habits are not controlled.
+- Removing hub duty almost certainly involved TV interaction and may have involved
+  a restart, which resets whatever clock the fault runs on. The first post-change
+  session is therefore weaker evidence than the third.
+- **The recorder retains about twelve days.** If nobody looks inside that window,
+  the comparison is lost. The check has to happen by roughly 2026-08-29.
+- Watch for a side effect: a TV that is no longer a hub may sleep more
+  aggressively, which would touch the art-sleep and Wake-on-LAN findings in #8,
+  #12 and #17 rather than this issue.
 
 ## Four tests that cost nothing at the next occurrence
 
