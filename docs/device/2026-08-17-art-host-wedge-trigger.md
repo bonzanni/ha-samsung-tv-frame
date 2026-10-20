@@ -24,6 +24,12 @@ remedy asymmetry: a soft power-off does not clear it, a mains cycle does. The
 maintainer of the library this integration builds on attributes it to a memory
 leak in Samsung's own art websocket code.
 
+> **Added 2026-10-20:** a second, unrelated fault produces the same hostless
+> signature. That is the art app crashing with on-screen error 60004 on Art
+> Store artwork it cannot load (issue #20). It survives a mains cycle and clears
+> when different artwork is selected. See the note at the end of the
+> hub-experiment section before reading any new occurrence as this wedge.
+
 Nothing in the public record connects the fault to watching. Finding 1 appears to
 be new.
 
@@ -322,6 +328,25 @@ Honest limits, stated up front so a later reader is not misled:
 - Watch for a side effect: a TV that is no longer a hub may sleep more
   aggressively, which would touch the art-sleep and Wake-on-LAN findings in #8,
   #12 and #17 rather than this issue.
+
+### 2026-10-20: the experiment produced no usable read-out
+
+Nobody read the recorder before the 2026-08-29 deadline, so the August
+after-removal sessions are gone. The October window cannot stand in for it.
+From at least 2026-10-10 the TV was in a **different fault with the same
+signature** (issue #20): its art app crashed with on-screen error **60004**
+every time Art Mode tried to show an Art Store artwork it could no longer load.
+From Home Assistant that is indistinguishable from this wedge: same hostless
+handshake, same `unknown` `tv_mode`. But it struck within a minute of every wake,
+it survived a mains cycle, and it cleared the moment different artwork was
+selected. A crash on every session says nothing about whether long viewing
+sessions wedge the host, so the hub question is still open. The next clean
+window starts 2026-10-20.
+
+**Before reading any future occurrence as this wedge, rule 60004 out.** Ask
+what the panel shows in Art Mode. An error code and no art means 60004.
+Artwork still displayed means this fault. The other tell is the remedy: a
+mains cycle clears this wedge and does not clear 60004.
 
 ## Four tests that cost nothing at the next occurrence
 
