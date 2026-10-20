@@ -43,6 +43,43 @@ To remove it, delete the config entry, then delete the
   right and occasionally not — this entity is how you tell that inference apart from a fact,
   and it pairs with the `lost_contact` / `regained_contact` device triggers. Undebounced, so
   use `for:` in automations if you want to ignore brief drops.
+- `binary_sensor.samsung_frame_tv_art_service` — **problem** when the TV's Art service has
+  stopped hosting its own channel: the TV is on the network and answering, the panel may
+  still be showing artwork, but every art query fails, so art mode, artwork and art settings
+  go unavailable. This is the one fault the integration can detect and never fix — measured
+  on a 2022 Frame, it survives reconnecting, powering the TV off and on, waking it with
+  Wake-on-LAN, and leaving and re-entering art mode. Two causes are on record:
+  - **The TV shows an error code in Art Mode, such as 60004, and no art.** The art app is
+    crashing on the artwork it is trying to show — seen with Art Store artwork it could no
+    longer load. A power cycle does not help. Select different artwork on the TV (your own
+    photo is the safest test) and check the Art Store subscription.
+  - **No error on screen.** The Art service has wedged. Only disconnecting the TV from mains
+    for 30 seconds cleared it.
+
+  A repair notification says the same thing when it happens. Stays `off` while the TV is
+  unreachable, since a TV you cannot see is not evidence of a wedged art service. If your
+  Frame is on a switchable outlet, this entity is what you automate the power cycle on. The
+  condition limits it to one cycle every six hours, so a fault a power cycle cannot fix
+  does not reboot the TV over and over:
+
+  ```yaml
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.samsung_frame_tv_art_service
+      to: "on"
+      for: "00:15:00"
+  conditions:
+    - condition: state
+      entity_id: switch.tv_outlet
+      state: "on"
+      for: "06:00:00"
+  actions:
+    - action: switch.turn_off
+      target: { entity_id: switch.tv_outlet }
+    - delay: "00:00:45"
+    - action: switch.turn_on
+      target: { entity_id: switch.tv_outlet }
+  ```
 - `switch.samsung_frame_tv_art_mode_switch` — the clickable art ⇄ watching toggle
   (unavailable while the TV is off)
 - `sensor.samsung_frame_tv_current_art` — content id of the artwork currently selected

@@ -9,6 +9,27 @@
   integration loaded. 3.0.6 changes nothing this integration uses (type-hint
   imports only in the modules it relies on); the test suite passes on both.
 
+- **NEW:** `binary_sensor.<tv>_art_service` (problem, diagnostic) plus a repair
+  notification, for the one fault this integration can detect and never fix. The
+  TV's Art service can stop hosting its own channel: the websocket is accepted
+  and the handshake answered, but the TV reports no internal Art host, so every
+  art query fails while the panel keeps displaying artwork. Until now that state
+  was the *quietest* the integration could be in — no log line, no entity, no
+  repair, just every art entity going `unavailable` and `tv_mode` sitting at
+  `unknown`, for hours, with nothing saying why or what to do. It now warns once
+  on entering dormancy, publishes the state, and raises a repair naming the two
+  remedies on record. Reconnecting, a power-off with a full network exit, a
+  Wake-on-LAN wake and leaving and re-entering art mode were all measured on a
+  2022 Frame and none of them cleared it. If the TV shows an error code such as
+  60004 in Art Mode, its art app is crashing on artwork it cannot load: a power
+  cycle does not help there, and selecting different artwork does. Otherwise the
+  service has wedged, and disconnecting the TV from mains for 30 seconds clears
+  it. The README's switchable-outlet automation is limited to one power cycle
+  every six hours, so the first case cannot reboot the TV over and over. The
+  sensor stays `off` while the TV is unreachable, so a
+  recovery automation cannot fire merely because the TV was switched off, and
+  `art_host_unavailable` joins the diagnostics snapshot.
+
 - **NEW:** `binary_sensor.<tv>_connection` (connectivity, diagnostic) plus
   `lost_contact` / `regained_contact` device triggers. Until now nothing
   anywhere distinguished *"the TV says it is off"* from *"we cannot see the
