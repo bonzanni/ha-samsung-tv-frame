@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **FIX:** require `samsungtvws>=3.0.5` and `wakeonlan>=3.3.0` instead of
+  pinning exact versions. Home Assistant 2026.10 moved its own Samsung TV
+  integration to `samsungtvws` 3.0.6, so the exact pin made hassfest fail and
+  would have had Home Assistant reinstall 3.0.5 over core's copy each time this
+  integration loaded. 3.0.6 changes nothing this integration uses (type-hint
+  imports only in the modules it relies on); the test suite passes on both.
+
 - **NEW:** `binary_sensor.<tv>_connection` (connectivity, diagnostic) plus
   `lost_contact` / `regained_contact` device triggers. Until now nothing
   anywhere distinguished *"the TV says it is off"* from *"we cannot see the

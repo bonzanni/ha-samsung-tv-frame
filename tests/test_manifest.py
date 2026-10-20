@@ -65,6 +65,27 @@ def test_manifest_requirements_do_not_conflict_with_core_constraints() -> None:
     )
 
 
+def test_manifest_requirements_are_minimum_versions_not_pins() -> None:
+    """An exact pin breaks the day core bumps the library.
+
+    package_constraints.txt is not the only coupling: core's own integrations
+    (samsungtv, wake_on_lan) require these libraries too, and hassfest rejects
+    any custom pin that disagrees with them. HA 2026.10 moved samsungtvws to
+    3.0.6 against our ==3.0.5, which turned CI red on unrelated PRs and would
+    have had HA reinstall the older library over core's on every load.
+    """
+    requirements = json.loads(MANIFEST.read_text())["requirements"]
+    pinned = [
+        req
+        for req in requirements
+        if any(spec.operator in ("==", "===") for spec in Requirement(req).specifier)
+    ]
+    assert not pinned, (
+        f"exact pins in manifest requirements: {pinned}. Use a minimum "
+        "version (>=) so the requirement follows Home Assistant's upgrades."
+    )
+
+
 def test_conflict_detector_catches_the_0_9_0_regression() -> None:
     """Pin the historical bug so the detector itself cannot rot.
 
