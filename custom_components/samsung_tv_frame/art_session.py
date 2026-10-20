@@ -254,7 +254,10 @@ class ArtSession:
         This is the one art failure with no software remedy: the socket is
         accepted, the handshake is answered, and the TV reports no art host —
         measured to survive a power-off, a full network exit and a
-        Wake-on-LAN wake, and to clear only on a mains power cycle. It is
+        Wake-on-LAN wake. Two causes are on record: a wedge that clears only
+        on a mains power cycle, and an art app that crashes (on-screen error
+        60004) on artwork it cannot load, which survives the power cycle
+        too and clears once different artwork is selected. It is
         deliberately distinct from a TV that is merely off or unreachable,
         which fails with an ordinary connection error and must not be
         reported as a wedged art service.
@@ -284,8 +287,10 @@ class ArtSession:
                         "The TV's Art service is accepting connections but "
                         "reporting no internal Art host, so Art state and "
                         "settings are unavailable. Retrying every %d minutes. "
-                        "The only remedy measured to work is a power cycle: "
-                        "disconnect the TV from mains for 30 seconds",
+                        "If the TV shows an error code in Art Mode (such as "
+                        "60004), select different artwork on the TV and check "
+                        "its Art Store subscription; otherwise disconnect the "
+                        "TV from mains for 30 seconds",
                         int(ART_DORMANT_SECONDS // 60),
                     )
                 self._set_state(ArtSessionState.DORMANT)

@@ -1231,8 +1231,13 @@ async def test_entering_dormancy_on_a_hostless_host_is_logged(caplog):
         record for record in caplog.records if record.levelno >= logging.WARNING
     ]
     assert warnings, "entering hostless dormancy logged nothing"
-    assert any("power" in record.getMessage().lower() for record in warnings), (
-        "the warning must name the remedy, which is not guessable"
+    # Two causes share this handshake and need different remedies: a wedge
+    # clears on a mains power cycle; an art app crashing on artwork it cannot
+    # load (on-screen 60004) survives one and clears on different artwork.
+    messages = " ".join(record.getMessage().lower() for record in warnings)
+    assert "mains" in messages, "the warning must name the power-cycle remedy"
+    assert "artwork" in messages and "60004" in messages, (
+        "the warning must name the artwork remedy, which a power cycle cannot replace"
     )
 
     await session.async_stop()

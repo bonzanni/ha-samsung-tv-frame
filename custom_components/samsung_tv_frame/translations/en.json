@@ -43,7 +43,7 @@
   "issues": {
     "art_service_unavailable": {
       "title": "{name}: the Art service is not responding",
-      "description": "The TV is on the network and answering, and the panel may still be showing artwork, but its Art service is no longer hosting its own channel. Art mode state, artwork and Art settings are unavailable until it recovers.\n\nHome Assistant keeps retrying, but on this model no software remedy has been found to work: reconnecting, switching the TV off and on, waking it with Wake-on-LAN, and leaving and re-entering Art Mode were all measured and none of them cleared it.\n\n**To fix it: disconnect the TV from mains power for 30 seconds, then plug it back in.** This issue clears by itself once the Art service answers again."
+      "description": "The TV is on the network and answering, and the panel may still be showing artwork, but its Art service is no longer hosting its own channel. Art mode state, artwork and Art settings are unavailable until it recovers.\n\nHome Assistant keeps retrying, but on this model no software remedy has been found to work: reconnecting, switching the TV off and on, waking it with Wake-on-LAN, and leaving and re-entering Art Mode were all measured and none of them cleared it.\n\n**If the TV shows an error code in Art Mode (such as 60004) and no art:** the Art app is crashing on the artwork it is trying to show, and a power cycle will not help. Select different artwork on the TV, ideally one of your own photos, and check that your Art Store subscription is active.\n\n**Otherwise: disconnect the TV from mains power for 30 seconds, then plug it back in.** This issue clears by itself once the Art service answers again."
     }
   },
   "entity": {

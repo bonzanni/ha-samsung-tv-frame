@@ -84,7 +84,10 @@ class FrameArtServiceBinarySensor(FrameEntity, BinarySensorEntity):
 
     Measured 2026-08-16: it survives repeated reconnects, a 3 s power hold with
     a full network exit, a Wake-on-LAN wake, and leaving and re-entering art
-    mode. Only a mains power cycle cleared it. That is why this is published as
+    mode. Only a mains power cycle cleared it. Measured 2026-10-20: the same
+    hostless handshake when the art app crashed on artwork it could not load
+    (on-screen error 60004), which a power cycle did not clear and selecting
+    different artwork did. That is why this is published as
     a PROBLEM rather than folded into the connection sensor — it is the one
     fault the integration can detect but never fix, and the owner has to be
     told, in time to act.
