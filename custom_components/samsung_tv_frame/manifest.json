@@ -14,8 +14,8 @@
   "loggers": ["samsungtvws"],
   "quality_scale": "silver",
   "requirements": [
-    "samsungtvws[async,encrypted]==3.0.5",
-    "wakeonlan==3.3.0"
+    "samsungtvws[async,encrypted]>=3.0.5",
+    "wakeonlan>=3.3.0"
   ],
   "ssdp": [
     {"manufacturer": "Samsung Electronics", "deviceType": "urn:samsung.com:device:RemoteControlReceiver:1"}
