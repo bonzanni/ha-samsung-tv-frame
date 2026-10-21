@@ -20,5 +20,5 @@
   "ssdp": [
     {"manufacturer": "Samsung Electronics", "deviceType": "urn:samsung.com:device:RemoteControlReceiver:1"}
   ],
-  "version": "0.9.1"
+  "version": "0.10.0"
 }

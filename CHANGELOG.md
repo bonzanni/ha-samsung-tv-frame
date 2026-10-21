@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
 
 - **FIX:** the current-art image no longer shows a *different* artwork when
   the thumbnail for the current one cannot be fetched (#13). It used to serve
