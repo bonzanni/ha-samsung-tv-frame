@@ -1946,6 +1946,28 @@ async def test_wake_probe_refreshes_when_port_opens(hass, mock_device):
     refresh.assert_awaited_once()
 
 
+async def test_wake_probe_warning_reports_the_time_it_actually_waited(
+    hass, mock_device, caplog
+):
+    """Issue #17: each attempt costs a probe of up to 2 s plus the 1 s sleep,
+    so the old computed "30 s" contradicted a wall-clock gap of ~49 s."""
+    coord = _make(hass, mock_device)
+    coord.data = FrameData(
+        reachable=False, power_state=None, art_mode=None,
+        tv_mode=TvMode.OFF, current_art=None,
+    )
+    with (
+        patch.object(coord, "_async_probe_port", AsyncMock(return_value=False)),
+        patch("custom_components.samsung_tv_frame.coordinator.WAKE_PROBE_DELAY", 0),
+        patch.object(coord, "_clock", MagicMock(side_effect=[100.0, 148.8])),
+        caplog.at_level(logging.WARNING),
+    ):
+        await coord._wake_probe()
+
+    messages = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("within 49 s" in m for m in messages), messages
+
+
 async def test_wake_probe_exits_immediately_when_not_off(hass, mock_device):
     coord = _make(hass, mock_device)
     coord.data = FrameData(

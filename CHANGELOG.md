@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **FIX:** the current-art image no longer shows a *different* artwork when
+  the thumbnail for the current one cannot be fetched (#13). It used to serve
+  whichever artwork last succeeded — a real, plausible, wrong picture with
+  nothing saying it was stale. It now serves the placeholder and retries on the
+  next request. While no current artwork is known at all (TV off, art channel
+  down) it still shows the last one fetched. A failing fetch also no longer
+  moves the image's timestamp on every unrelated update, which made the
+  frontend refetch for nothing.
+- **FIX:** the Wake-on-LAN warning reports how long the integration actually
+  waited (#17). It printed a computed 30 s while the probe can run for up to
+  90 s, so a real ~49 s wait looked like a contradiction in the log.
+
 - **FIX:** the current-art picture shown as a small icon (entity rows, tiles)
   now follows the slideshow. Home Assistant's picture URL for image entities
   only changes when its access token rotates, every 5 minutes, and the icon

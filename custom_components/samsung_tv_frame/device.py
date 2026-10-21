@@ -582,9 +582,10 @@ class FrameDevice:
         )
 
     async def async_get_art_thumbnail(self, content_id: str) -> bytes | None:
-        """JPEG thumbnail bytes for an artwork, or None.
+        """JPEG thumbnail bytes for an artwork, or None if it cannot be fetched.
 
-        Store artworks (SAM-*) are DRM-refused by the TV and yield None.
+        Store artworks (SAM-*) were refused by the TV in July 2026 and served
+        on 2026-10-20 with an active Art Store subscription.
         """
         if self._stopped or not self._art_session.ready:
             return None
