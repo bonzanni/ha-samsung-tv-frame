@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **FIX:** the current-art picture shown as a small icon (entity rows, tiles)
+  now follows the slideshow. Home Assistant's picture URL for image entities
+  only changes when its access token rotates, every 5 minutes, and the icon
+  loads that URL as-is, so with a 3-minute slideshow the icon kept showing an
+  earlier artwork while opening it showed the right one. The URL now carries
+  the artwork's update time, so it changes exactly when the artwork does.
+
 - **FIX:** require `samsungtvws>=3.0.5` and `wakeonlan>=3.3.0` instead of
   pinning exact versions. Home Assistant 2026.10 moved its own Samsung TV
   integration to `samsungtvws` 3.0.6, so the exact pin made hassfest fail and

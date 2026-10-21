@@ -91,3 +91,39 @@ async def test_image_keeps_last_thumbnail_on_fetch_failure(hass, mock_device):
     )
     assert await entity.async_image() == b"jpeg-bytes"
     mock_device.async_get_art_thumbnail.assert_awaited_once_with("MY_F0042")
+
+
+async def test_entity_picture_changes_with_the_artwork(
+    hass, mock_device, hass_client_no_auth
+):
+    """The small picture (state-badge) loads `entity_picture` as-is.
+
+    Core's URL only carries the access token, which rotates every 5 minutes,
+    so with a faster slideshow the badge kept showing an old artwork while the
+    more-info dialog (which appends `&state=`) showed the right one. The URL
+    must change with the artwork, stay put otherwise, and still load.
+    """
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    mock_device.async_get_artmode.return_value = True
+    mock_device.async_get_current_art.return_value = "MY_F0034"
+    mock_device.async_get_art_thumbnail.return_value = b"jpeg-bytes"
+    entry = await _setup(hass, mock_device)
+    coordinator = entry.runtime_data
+    first = hass.states.get(ENTITY).attributes["entity_picture"]
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(ENTITY).attributes["entity_picture"] == first
+
+    coordinator.handle_art_event(
+        "d2d_service_message",
+        {"event": "image_selected", "content_id": "MY_F0042"},
+    )
+    await hass.async_block_till_done()
+    second = hass.states.get(ENTITY).attributes["entity_picture"]
+    assert second != first
+
+    client = await hass_client_no_auth()
+    response = await client.get(second)
+    assert response.status == 200
+    assert await response.read() == b"jpeg-bytes"

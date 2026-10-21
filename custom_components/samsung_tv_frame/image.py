@@ -46,6 +46,21 @@ class FrameCurrentArtImage(FrameEntity, ImageEntity):
         if coordinator.data and coordinator.data.current_art:
             self._attr_image_last_updated = dt_util.utcnow()
 
+    @property
+    def entity_picture(self) -> str | None:
+        """Core's URL, versioned by the artwork it shows.
+
+        Core's URL only carries the access token, which rotates every 5
+        minutes. The more-info dialog appends `&state=` itself, but the
+        state badge loads `entity_picture` as-is, so with a faster slideshow
+        the badge kept showing an old artwork. The proxy ignores extra query
+        parameters.
+        """
+        url = super().entity_picture
+        if url is None or self.image_last_updated is None:
+            return url
+        return f"{url}&v={self.image_last_updated.timestamp()}"
+
     @callback
     def _handle_coordinator_update(self) -> None:
         content_id = self.coordinator.data.current_art
