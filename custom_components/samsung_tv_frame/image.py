@@ -14,8 +14,10 @@ from .entity import FrameEntity
 
 PARALLEL_UPDATES = 0
 
-# Shown when the TV refuses the thumbnail (Samsung Store artworks are
-# DRM-protected) — a designed card beats the frontend's broken-image icon.
+# Shown when the thumbnail for the current artwork cannot be fetched — a
+# designed card beats both the frontend's broken-image icon and a picture of
+# some other artwork (#13). Store artworks were refused in July 2026 and served
+# on 2026-10-20 with an active Art Store subscription.
 _PLACEHOLDER_PATH = Path(__file__).parent / "placeholder.jpg"
 
 
@@ -43,7 +45,11 @@ class FrameCurrentArtImage(FrameEntity, ImageEntity):
         self._fetched_id: str | None = None
         self._fetched_image: bytes | None = None
         self._placeholder: bytes | None = None
+        # The artwork image_last_updated refers to — tracked apart from the
+        # last successful fetch, so a failing fetch does not re-bump it.
+        self._shown_id: str | None = None
         if coordinator.data and coordinator.data.current_art:
+            self._shown_id = coordinator.data.current_art
             self._attr_image_last_updated = dt_util.utcnow()
 
     @property
@@ -66,24 +72,27 @@ class FrameCurrentArtImage(FrameEntity, ImageEntity):
         content_id = self.coordinator.data.current_art
         # Bump the timestamp only on a real change: the frontend refetches
         # the proxied image whenever image_last_updated moves.
-        if content_id and content_id != self._fetched_id:
+        if content_id and content_id != self._shown_id:
+            self._shown_id = content_id
             self._attr_image_last_updated = dt_util.utcnow()
         super()._handle_coordinator_update()
 
     async def async_image(self) -> bytes | None:
         content_id = self.coordinator.data.current_art
         if content_id is None:
+            # Nothing newer is known (TV off, art channel down): the last
+            # artwork fetched is still the last one that was on the wall.
             return self._fetched_image or await self._async_placeholder()
         if content_id == self._fetched_id and self._fetched_image is not None:
             return self._fetched_image
         image = await self.coordinator.device.async_get_art_thumbnail(content_id)
-        if image is not None:
-            self._fetched_id = content_id
-            self._fetched_image = image
-        # Serve the previous artwork rather than a broken image if the
-        # thumbnail fetch fails (TV off, or DRM-refused store artwork);
-        # fall back to the bundled placeholder when nothing was ever fetched.
-        return image or self._fetched_image or await self._async_placeholder()
+        if image is None:
+            # Never the previous artwork: that is a real, plausible, wrong
+            # picture (#13). The next request retries the fetch.
+            return await self._async_placeholder()
+        self._fetched_id = content_id
+        self._fetched_image = image
+        return image
 
     async def _async_placeholder(self) -> bytes:
         if self._placeholder is None:

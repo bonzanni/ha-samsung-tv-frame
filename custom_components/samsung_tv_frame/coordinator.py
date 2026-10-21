@@ -477,6 +477,7 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         )
 
     async def _wake_probe(self) -> None:
+        started = self._clock()
         for _ in range(WAKE_PROBE_ATTEMPTS):
             if self.data is not None and self.data.tv_mode is not TvMode.OFF:
                 return
@@ -489,7 +490,10 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             "TV did not respond within %.0f s of the Wake-on-LAN packet; "
             "check that WoL is enabled on the TV and the stored MAC matches "
             "its active network interface",
-            WAKE_PROBE_ATTEMPTS * WAKE_PROBE_DELAY,
+            # Measured, not computed: each attempt also spends up to
+            # WAKE_PROBE_TIMEOUT inside the probe, so the real wait is
+            # anywhere from 30 s to 90 s (#17).
+            self._clock() - started,
         )
 
     async def _async_probe_port(self) -> bool:
