@@ -405,8 +405,7 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             self._art_fail_warned = True
             LOGGER.warning(
                 "Art websocket has failed %s consecutive polls; "
-                "tv_mode will report unknown until it recovers "
-                "(check the TV's device connection permissions)",
+                "tv_mode will report unknown until it recovers",
                 self._art_fail_streak,
             )
 
