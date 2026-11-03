@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.1
+
+- **FIX:** DHCP discovery no longer offers to set up Samsung devices that are
+  not Frame TVs (#25). The `samsung*` hostname matcher also matches Samsung air
+  conditioners, phones and appliances, which produced a setup card that kept
+  coming back. A device whose MAC is not configured yet must now identify as a
+  Frame over REST first, as SSDP discovery already required. A known TV's
+  address is still repaired without contacting it, so this also works while
+  the TV is off.
+- **FIX:** the "Art websocket has failed N consecutive polls" warning no longer
+  tells you to check the TV's device connection permissions. Denied
+  permissions already start a reauthorization flow, and when the Art service
+  is the cause, the Art service warning and repair name the actual remedies.
+
 ## 0.10.0
 
 - **FIX:** the current-art image no longer shows a *different* artwork when
