@@ -211,10 +211,18 @@ class SamsungFrameConfigFlow(ConfigFlow, domain=DOMAIN):
         single-signal oracle over the REST port, so a stale address makes the
         TV read as permanently off with no recovery path. DHCP carries the MAC
         natively, which is exactly the identity this entry is keyed on.
+
+        A known MAC is repaired without touching the device (the TV may be
+        off). An unknown one must prove it is a Frame first: the manifest's
+        `samsung*` hostname matcher also catches air conditioners and phones.
         """
-        return await self._async_handle_discovery(
-            format_mac(discovery_info.macaddress), discovery_info.ip
-        )
+        mac = format_mac(discovery_info.macaddress)
+        host = discovery_info.ip
+        await self.async_set_unique_id(mac)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        if await async_discover_identity(self.hass, host) is None:
+            return self.async_abort(reason="not_a_frame")
+        return await self._async_handle_discovery(mac, host)
 
     async def async_step_ssdp(
         self, discovery_info: SsdpServiceInfo

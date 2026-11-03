@@ -667,6 +667,9 @@ async def test_dhcp_discovery_does_not_touch_a_different_tv(hass):
 
     entry = _entry(hass, host="1.2.3.4")
     with patch(
+        "custom_components.samsung_tv_frame.config_flow.async_discover_identity",
+        new=AsyncMock(return_value="02:00:00:00:00:99"),
+    ), patch(
         "custom_components.samsung_tv_frame.async_setup_entry", return_value=True
     ):
         await hass.config_entries.flow.async_init(
@@ -681,17 +684,71 @@ async def test_dhcp_discovery_does_not_touch_a_different_tv(hass):
     assert entry.data[CONF_HOST] == "1.2.3.4"
 
 
+async def test_dhcp_discovery_of_known_tv_never_calls_the_device(hass):
+    """Address repair must work while the TV is off, so it cannot depend on REST."""
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+    entry = _entry(hass, host="1.2.3.4")
+    identity = AsyncMock(return_value=None)
+    with patch(
+        "custom_components.samsung_tv_frame.config_flow.async_discover_identity",
+        new=identity,
+    ), patch(
+        "custom_components.samsung_tv_frame.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "dhcp"},
+            data=DhcpServiceInfo(
+                ip="5.6.7.8", hostname="samsung-tv", macaddress=DISCOVERY_MAC_DHCP
+            ),
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == "5.6.7.8"
+    assert identity.await_count == 0
+
+
+async def test_dhcp_discovery_aborts_when_device_is_not_a_frame(hass):
+    """The samsung* hostname matcher also catches air conditioners, phones, etc."""
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+    identity = AsyncMock(return_value=None)
+    with patch(
+        "custom_components.samsung_tv_frame.config_flow.async_discover_identity",
+        new=identity,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "dhcp"},
+            data=DhcpServiceInfo(
+                ip="5.6.7.8", hostname="samsung-ac", macaddress="020000000099"
+            ),
+        )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "not_a_frame"
+    assert identity.await_count == 1
+    assert identity.await_args.args[1] == "5.6.7.8"
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+
+
 async def test_dhcp_discovery_of_new_tv_prefills_the_host(hass):
     """An unknown TV offers the discovered address rather than an empty box."""
     from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": "dhcp"},
-        data=DhcpServiceInfo(
-            ip="5.6.7.8", hostname="samsung-tv", macaddress=DISCOVERY_MAC_DHCP
-        ),
-    )
+    with patch(
+        "custom_components.samsung_tv_frame.config_flow.async_discover_identity",
+        new=AsyncMock(return_value=DISCOVERY_MAC),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "dhcp"},
+            data=DhcpServiceInfo(
+                ip="5.6.7.8", hostname="samsung-tv", macaddress=DISCOVERY_MAC_DHCP
+            ),
+        )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
     # the discovered address is offered as the default
