@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0
+
+- **NEW:** option **Detect the running app** (on by default). While the TV is
+  watching, the integration asks it on every heartbeat which of the curated
+  apps is in the foreground: one REST call per app, 7 calls every 10 s. That is
+  the only traffic it sends only while you watch, and the Art-host wedge (#10)
+  strikes only during watching. Turning the option off stops that traffic so
+  its role can be tested. The media player's source then stays empty while
+  watching. Diagnostics report the setting.
+
 ## 0.10.1
 
 - **FIX:** DHCP discovery no longer offers to set up Samsung devices that are

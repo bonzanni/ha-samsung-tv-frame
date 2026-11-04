@@ -19,10 +19,12 @@ from .const import (
     ART_RECONCILE_SECONDS,
     CONF_TOKEN,
     DEFAULT_APP_MAP,
+    DEFAULT_DETECT_RUNNING_APP,
     DEFAULT_HEARTBEAT_SECONDS,
     DOMAIN,
     LOGGER,
     OFF_DEBOUNCE_COUNT,
+    OPT_DETECT_RUNNING_APP,
     OPT_HEARTBEAT,
     POLL_DEADLINE,
     PORT_REST,
@@ -268,7 +270,13 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             self.device.remote_confirmed = False
 
         running_app: str | None = None
-        if mode is TvMode.WATCHING and self.app_map:
+        if (
+            mode is TvMode.WATCHING
+            and self.app_map
+            and self.config_entry.options.get(
+                OPT_DETECT_RUNNING_APP, DEFAULT_DETECT_RUNNING_APP
+            )
+        ):
             running_app = await self._async_detect_running_app()
 
         volume_level: float | None = None

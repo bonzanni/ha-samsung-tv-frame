@@ -614,6 +614,33 @@ async def test_options_flow_sets_heartbeat(hass):
     assert entry.options[OPT_HEARTBEAT] == 30
 
 
+async def test_options_flow_can_turn_off_running_app_detection(hass):
+    from custom_components.samsung_tv_frame.const import OPT_DETECT_RUNNING_APP
+
+    entry = _existing_entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.samsung_tv_frame.async_setup_entry", return_value=True
+    ), patch(
+        "custom_components.samsung_tv_frame.async_unload_entry", return_value=True
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        # Default stays on, so nobody's behaviour changes without opting out.
+        defaults = {
+            str(key): key.default()
+            for key in result["data_schema"].schema
+            if callable(getattr(key, "default", None))
+        }
+        assert defaults[OPT_DETECT_RUNNING_APP] is True
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {OPT_HEARTBEAT: 10, OPT_DETECT_RUNNING_APP: False}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[OPT_DETECT_RUNNING_APP] is False
+
+
 # --- Discovery: DHCP / SSDP -------------------------------------------------
 # The manifest declares dhcp and ssdp matchers. Home Assistant's base ConfigFlow
 # supplies default steps for both, but they only fall through to async_step_user:

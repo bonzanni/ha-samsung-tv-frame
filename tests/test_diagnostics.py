@@ -170,6 +170,7 @@ async def test_loaded_diagnostics_exact_allowlist_privacy_and_zero_io(
         "loaded": True,
         "model": "QE65LS03BAUXXH",
         "heartbeat_seconds": 37,
+        "detect_running_app": True,
         "last_update_success": False,
         "reachable": True,
         "power_state": "on",
@@ -229,6 +230,7 @@ async def test_unloaded_diagnostics_exact_static_allowlist(hass):
         "loaded": False,
         "model": "QE65LS03BAUXXH",
         "heartbeat_seconds": 10,
+        "detect_running_app": True,
     }
     serialized = json.dumps(result, sort_keys=True)
     for canary in UNLOADED_PRIVATE_CANARIES:

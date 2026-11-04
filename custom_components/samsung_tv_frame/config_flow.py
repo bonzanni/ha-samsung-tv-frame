@@ -27,8 +27,10 @@ from .const import (
     CONF_MAC,
     CONF_MODEL,
     CONF_TOKEN,
+    DEFAULT_DETECT_RUNNING_APP,
     DEFAULT_HEARTBEAT_SECONDS,
     DOMAIN,
+    OPT_DETECT_RUNNING_APP,
     OPT_HEARTBEAT,
     PAIRING_DEADLINE,
     PORT_REST,
@@ -351,7 +353,7 @@ class SamsungFrameConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class FrameOptionsFlow(OptionsFlowWithReload):
-    """Options: polling heartbeat (the entry reloads on save)."""
+    """Options: heartbeat and running-app detection (reloads on save)."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -368,6 +370,12 @@ class FrameOptionsFlow(OptionsFlowWithReload):
                             OPT_HEARTBEAT, DEFAULT_HEARTBEAT_SECONDS
                         ),
                     ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                    vol.Required(
+                        OPT_DETECT_RUNNING_APP,
+                        default=self.config_entry.options.get(
+                            OPT_DETECT_RUNNING_APP, DEFAULT_DETECT_RUNNING_APP
+                        ),
+                    ): bool,
                 }
             ),
         )
