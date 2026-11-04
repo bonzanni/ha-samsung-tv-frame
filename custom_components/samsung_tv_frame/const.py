@@ -27,6 +27,11 @@ CONF_MODEL = "model"
 
 # Options
 OPT_HEARTBEAT = "heartbeat_seconds"
+# Watching-only REST fan-out (one app-status call per curated app, every
+# heartbeat). Switchable so it can be ruled in or out as a factor in the
+# art-host wedge (issue #10); on by default.
+OPT_DETECT_RUNNING_APP = "detect_running_app"
+DEFAULT_DETECT_RUNNING_APP = True
 DEFAULT_HEARTBEAT_SECONDS = 10
 
 # Entity services (registered on media_player)

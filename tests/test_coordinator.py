@@ -1284,6 +1284,31 @@ async def test_running_app_none_when_no_visible_app(hass, mock_device):
     assert data.running_app is None
 
 
+async def test_running_app_not_swept_when_detection_disabled(hass, mock_device):
+    """Opting out stops the watching-only REST fan-out entirely (issue #10 A/B)."""
+    from custom_components.samsung_tv_frame.const import OPT_DETECT_RUNNING_APP
+
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    mock_device.async_app_status.return_value = {"visible": True}
+    coord = _make(hass, mock_device)
+    coord.config_entry.options = {OPT_DETECT_RUNNING_APP: False}
+    coord.app_map = {"Netflix": {"appId": "NETFLIX_ID"}}
+    _seed_ready_art(
+        mock_device,
+        coord,
+        generation=1,
+        now=0.0,
+        art_mode=False,
+        current_art=None,
+        brightness=None,
+        color_temperature=None,
+    )
+    data = await coord._async_update_data()
+    assert data.tv_mode is TvMode.WATCHING
+    mock_device.async_app_status.assert_not_awaited()
+    assert data.running_app is None
+
+
 async def test_running_app_not_swept_in_art_mode(hass, mock_device):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
     coord = _make(hass, mock_device)
