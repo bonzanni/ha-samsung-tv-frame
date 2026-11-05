@@ -15,6 +15,7 @@ from .const import (
     ART_CLOSE_DEADLINE,
     ART_CONNECT_DEADLINE,
     ART_DORMANT_SECONDS,
+    ART_HOST_FAULT_ANSWERS,
     ART_HOST_RETRY_DELAYS,
     ART_RETRY_DELAYS,
     ART_RETRY_JITTER,
@@ -82,6 +83,7 @@ class ArtSession:
         self._failure_count = 0
         self._host_failure_count = 0
         self._host_unavailable = False
+        self._hostless_answers = 0
         self._dormancy_warned = False
         self._next_retry_at = 0.0
         self._last_reachable: bool | None = None
@@ -130,6 +132,9 @@ class ArtSession:
         self._last_reachable = reachable
         if reachable_edge:
             self._reset_failures()
+            # A returning TV may have booted since, so a wedge must be
+            # confirmed again before it is reported.
+            self._hostless_answers = 0
             self._next_retry_at = 0.0
         if not reachable or power_state not in {"on", "standby"}:
             return
@@ -245,6 +250,7 @@ class ArtSession:
         """
         self._reset_failures()
         self._host_unavailable = False
+        self._hostless_answers = 0
         self._dormancy_warned = False
 
     @property
@@ -270,13 +276,26 @@ class ArtSession:
         """
         return self._host_unavailable
 
+    @property
+    def host_fault(self) -> bool:
+        """Whether the hostless answers amount to a fault worth reporting.
+
+        `host_unavailable` remembers the last answer; this needs fresh,
+        repeated evidence. A booting TV answers hostless until its art app
+        registers, and a TV seen again after leaving the network may have
+        booted, so the count restarts on a reachable edge. Ordinary errors in
+        between do not restart it, so a real wedge cannot flap the report.
+        """
+        return self._hostless_answers >= ART_HOST_FAULT_ANSWERS
+
     def _record_failure(self, error: Exception) -> None:
         self._failure_count += 1
         now = self._clock()
         if isinstance(error, ArtHostUnavailable):
             self._host_failure_count += 1
+            self._hostless_answers += 1
             self._host_unavailable = True
-            if self._host_failure_count >= 3:
+            if self._host_failure_count >= ART_HOST_FAULT_ANSWERS:
                 self._next_retry_at = now + ART_DORMANT_SECONDS
                 if not self._dormancy_warned:
                     # Said once per wedge, not once per retry: dormant retries

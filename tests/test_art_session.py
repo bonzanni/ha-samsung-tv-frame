@@ -1374,3 +1374,74 @@ async def test_a_reachable_edge_does_not_retract_a_confirmed_wedge():
     assert session._next_retry_at == 0.0, "the edge must still clear the backoff"
 
     await session.async_stop()
+
+
+async def test_a_booting_tv_that_recovers_between_retries_is_not_a_fault():
+    """#29, the reviewer's case: hostless at 0 s and ~80 s, host up at 84 s.
+
+    The sticky flag still says hostless until the next attempt, minutes
+    later, so the fault must rest on repeated answers, not elapsed time.
+    """
+    art = FakeArt([ArtHostUnavailable("booting"), ArtHostUnavailable("booting"), None])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    for _ in range(2):
+        assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+        clock.now = session._next_retry_at
+    assert session.host_unavailable
+    assert not session.host_fault
+
+    assert await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert not session.host_fault
+    await session.async_stop()
+
+
+async def test_three_hostless_answers_are_a_fault_despite_an_ordinary_error():
+    art = FakeArt(
+        [
+            ArtHostUnavailable("no host"),
+            ConnectionFailure("blip"),
+            ArtHostUnavailable("no host"),
+            ArtHostUnavailable("no host"),
+            None,
+        ]
+    )
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    for _ in range(3):
+        assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+        clock.now = session._next_retry_at
+        assert not session.host_fault
+    assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert session.host_fault
+
+    # Only a connection that works disproves it.
+    clock.now = session._next_retry_at
+    assert await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert not session.host_fault
+    await session.async_stop()
+
+
+async def test_a_tv_seen_again_must_confirm_the_fault_afresh():
+    """It may have been mains-cycled and be booting now."""
+    art = FakeArt([ArtHostUnavailable("no host") for _ in range(3)])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+    for _ in range(3):
+        await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+        clock.now = session._next_retry_at
+    assert session.host_fault
+
+    art.block_next_start()
+    session.observe_power(reachable=True, power_state="on", reachable_edge=True)
+    assert not session.host_fault
+    # The remembered answer is untouched; only the report needs new evidence.
+    assert session.host_unavailable
+    art.release_start()
+    await asyncio.sleep(0)
+    await session.async_stop()

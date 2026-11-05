@@ -69,10 +69,6 @@ OFF_DEBOUNCE_COUNT = 2
 # last-stable and reports unknown (a permanently dead art channel must not
 # freeze state forever).
 ART_FAIL_UNKNOWN_COUNT = 6
-# How long the Art channel must keep answering without a host, while the TV is
-# on, before that is reported as a fault. A booting TV answers hostless until
-# its art app registers: 15 s and 84 s on two cold boots of a 2022 Frame (#29).
-ART_HOST_GRACE_SECONDS = 180.0
 
 # get_artmode_status reports a third value while the art menu is on screen.
 # Confirmed live on this model. It means "cannot tell", not "not art mode".
@@ -96,6 +92,11 @@ REMOTE_CANCEL_DEADLINE = 2
 ART_RETRY_DELAYS = (30.0, 60.0, 120.0, 300.0)
 ART_HOST_RETRY_DELAYS = (60.0, 120.0, 300.0)
 ART_DORMANT_SECONDS = 900.0
+# Consecutive hostless Art answers that make a wedge: the session goes dormant,
+# and the Art service is reported as a problem. Three answers span about three
+# minutes of retries, so a booting TV, which answers hostless until its art app
+# registers (84 s measured on a 2022 Frame), is never reported (#29).
+ART_HOST_FAULT_ANSWERS = 3
 ART_RETRY_JITTER = 0.20
 ART_RECONCILE_SECONDS = 300.0
 PAIRING_DEADLINE = 30
