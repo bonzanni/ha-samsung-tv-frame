@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .art_session import ArtSessionState
 from .const import (
     ART_FAIL_UNKNOWN_COUNT,
+    ART_HOST_GRACE_SECONDS,
     ART_MODE_NAV,
     ART_RECONCILE_SECONDS,
     CONF_TOKEN,
@@ -80,6 +81,8 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         self._art_ready_refresh_task: asyncio.Task | None = None
         self._art_service_repair_raised = False
         self._art_service_repair_synced = False
+        # When the current hostless stretch was first seen, or None.
+        self._art_hostless_since: float | None = None
         self._standby_refresh_task: asyncio.Task | None = None
         # Consecutive polls (reachable, power on) with a failed art query;
         # bounds the last-stable hold so a permanently broken art channel
@@ -165,6 +168,33 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
             )
         else:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _art_service_fault(
+        self, reachable: bool, session_power_state: str | None
+    ) -> bool:
+        """Whether a hostless Art channel is a fault the owner should act on.
+
+        Three ordinary situations answer without a host and must not count:
+        an unreachable TV (it fails Art for the ordinary reason, and reporting
+        it would fire the owner's recovery automation at every switch-off); a
+        TV the Art session is not asking, such as one briefly awake in standby
+        with the screen dark, where the sticky flag is only remembered from an
+        earlier session; and a TV that is still booting. So the hostless
+        answer must come from a TV the session is asking, and must outlast a
+        boot.
+        """
+        hostless = (
+            reachable
+            and session_power_state in {"on", "standby"}
+            and self.device.art_host_unavailable
+        )
+        if not hostless:
+            self._art_hostless_since = None
+            return False
+        now = self._clock()
+        if self._art_hostless_since is None:
+            self._art_hostless_since = now
+        return now - self._art_hostless_since >= ART_HOST_GRACE_SECONDS
 
     @callback
     def clear_art_service_repair(self) -> None:
@@ -315,17 +345,14 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         published_slideshow = (
             self._slideshow if optional_fresh and not is_off else None
         )
-        # A wedged Art host only means something while we can see the TV: an
-        # unreachable TV fails Art for the ordinary reason, and reporting a
-        # problem there would fire the owner's recovery automation every time
-        # the TV is switched off.
-        self._update_art_service_repair(reachable and self.device.art_host_unavailable)
+        art_service_unavailable = self._art_service_fault(
+            reachable, session_power_state
+        )
+        self._update_art_service_repair(art_service_unavailable)
 
         return FrameData(
             reachable=reachable,
-            art_service_unavailable=(
-                reachable and self.device.art_host_unavailable
-            ),
+            art_service_unavailable=art_service_unavailable,
             power_state=power_state,
             art_mode=False if is_off else effective_art_mode,
             tv_mode=mode,

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.1
+
+- **FIX:** the Art service problem sensor and its repair no longer fire while
+  the TV boots or briefly wakes from standby (#29). A booting Frame answers the
+  Art channel without a host until its art app registers (84 s on the last
+  cold boot), so a hostless answer now counts as a fault only after three
+  minutes. A screen-dark standby wake no longer reports an earlier wedge that
+  the integration remembered but did not check again. A real wedge is
+  reported three minutes after the TV comes on instead of at the first poll;
+  the README's power-cycle automation waits 15 minutes anyway.
+
 ## 0.11.0
 
 - **NEW:** option **Detect the running app** (on by default). While the TV is

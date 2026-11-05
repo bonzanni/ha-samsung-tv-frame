@@ -1,6 +1,7 @@
 """The wedged-art-service repair: the remedy is physical, so it must be said."""
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -11,6 +12,16 @@ from custom_components.samsung_tv_frame.const import (
     CONF_TOKEN,
     DOMAIN,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_art_host_grace():
+    """These tests are about what the fault means, not when it is reported;
+    the boot grace has its own tests in test_art_service_grace.py."""
+    with patch(
+        "custom_components.samsung_tv_frame.coordinator.ART_HOST_GRACE_SECONDS", 0
+    ):
+        yield
 
 
 async def _setup(hass, mock_device):

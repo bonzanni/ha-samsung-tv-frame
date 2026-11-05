@@ -69,6 +69,10 @@ OFF_DEBOUNCE_COUNT = 2
 # last-stable and reports unknown (a permanently dead art channel must not
 # freeze state forever).
 ART_FAIL_UNKNOWN_COUNT = 6
+# How long the Art channel must keep answering without a host, while the TV is
+# on, before that is reported as a fault. A booting TV answers hostless until
+# its art app registers: 15 s and 84 s on two cold boots of a 2022 Frame (#29).
+ART_HOST_GRACE_SECONDS = 180.0
 
 # get_artmode_status reports a third value while the art menu is on screen.
 # Confirmed live on this model. It means "cannot tell", not "not art mode".

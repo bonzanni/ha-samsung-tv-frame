@@ -1,6 +1,7 @@
 # tests/test_binary_sensor.py
 from unittest.mock import patch
 
+import pytest
 from homeassistant.const import EntityCategory
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -11,6 +12,16 @@ from custom_components.samsung_tv_frame.const import (
     CONF_TOKEN,
     DOMAIN,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_art_host_grace():
+    """These tests are about what the fault means, not when it is reported;
+    the boot grace has its own tests in test_art_service_grace.py."""
+    with patch(
+        "custom_components.samsung_tv_frame.coordinator.ART_HOST_GRACE_SECONDS", 0
+    ):
+        yield
 
 
 async def _setup(hass, mock_device):
