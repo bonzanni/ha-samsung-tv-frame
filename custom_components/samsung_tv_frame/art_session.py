@@ -283,8 +283,10 @@ class ArtSession:
         `host_unavailable` remembers the last answer; this needs fresh,
         repeated evidence. A booting TV answers hostless until its art app
         registers, and a TV seen again after leaving the network may have
-        booted, so the count restarts on a reachable edge. Ordinary errors in
-        between do not restart it, so a real wedge cannot flap the report.
+        booted, so the count restarts on a reachable edge, and only attempts
+        the retry schedule allowed count, so a user's commands cannot crowd
+        three answers into one boot. Ordinary errors in between do not
+        restart it, so a real wedge cannot flap the report.
         """
         return self._hostless_answers >= ART_HOST_FAULT_ANSWERS
 
@@ -293,7 +295,6 @@ class ArtSession:
         now = self._clock()
         if isinstance(error, ArtHostUnavailable):
             self._host_failure_count += 1
-            self._hostless_answers += 1
             self._host_unavailable = True
             if self._host_failure_count >= ART_HOST_FAULT_ANSWERS:
                 self._next_retry_at = now + ART_DORMANT_SECONDS
@@ -365,7 +366,12 @@ class ArtSession:
                 return None
             self._close_task = None
 
-        coroutine = self._connect_once()
+        # Only an attempt the retry schedule allowed is evidence for the
+        # fault: a user's command bypasses the backoff and could otherwise
+        # collect three answers during one boot.
+        coroutine = self._connect_once(
+            counts_as_evidence=self._clock() >= self._next_retry_at
+        )
         try:
             task = cast(
                 asyncio.Task[bool],
@@ -385,7 +391,7 @@ class ArtSession:
         if self._connect_task is task:
             self._connect_task = None
 
-    async def _connect_once(self) -> bool:
+    async def _connect_once(self, *, counts_as_evidence: bool = True) -> bool:
         self._set_state(ArtSessionState.CONNECTING)
         try:
             await self._art.start_listening()
@@ -412,6 +418,8 @@ class ArtSession:
             return False
         except ArtHostUnavailable as err:
             if self._started and not self._terminal:
+                if counts_as_evidence:
+                    self._hostless_answers += 1
                 self._record_failure(err)
             await self._close_transport(force=self._late_close_required())
             return False

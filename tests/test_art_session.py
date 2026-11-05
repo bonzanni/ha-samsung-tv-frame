@@ -1445,3 +1445,25 @@ async def test_a_tv_seen_again_must_confirm_the_fault_afresh():
     art.release_start()
     await asyncio.sleep(0)
     await session.async_stop()
+
+
+async def test_user_commands_during_a_boot_do_not_hurry_the_fault():
+    """Round-2 review: hostless at 0 s and 60 s, then a user's art command
+    at 70 s bypasses the backoff. That answer must not be the third."""
+    art = FakeArt([ArtHostUnavailable("booting") for _ in range(3)] + [None])
+    clock = FakeClock()
+    session, _ = make_session(art, clock)
+    await session.async_start()
+
+    for _ in range(2):
+        assert not await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+        clock.now = session._next_retry_at
+    clock.now -= 10
+    assert not await session.async_ensure_ready(ArtSessionTrigger.USER)
+    assert art.start_listening.await_count == 3
+    assert not session.host_fault
+
+    clock.now = session._next_retry_at
+    assert await session.async_ensure_ready(ArtSessionTrigger.BACKGROUND)
+    assert not session.host_fault
+    await session.async_stop()
