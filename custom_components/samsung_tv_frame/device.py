@@ -148,6 +148,11 @@ class FrameDevice:
         return self._art_session.host_unavailable
 
     @property
+    def art_host_fault(self) -> bool:
+        """Whether repeated hostless answers amount to a wedge (#29)."""
+        return self._art_session.host_fault
+
+    @property
     def art_session_state(self) -> ArtSessionState:
         """Return the supervised Art lifecycle state."""
         return self._art_session.state

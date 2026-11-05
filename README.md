@@ -57,7 +57,10 @@ To remove it, delete the config entry, then delete the
     for 30 seconds cleared it.
 
   A repair notification says the same thing when it happens. Stays `off` while the TV is
-  unreachable, since a TV you cannot see is not evidence of a wedged art service. If your
+  unreachable, since a TV you cannot see is not evidence of a wedged art service, and
+  until the TV has answered without an Art host three times in a row (about three minutes
+  of retries), since a booting TV answers that way until its art app is up (measured at
+  up to 84 s). If your
   Frame is on a switchable outlet, this entity is what you automate the power cycle on. The
   condition limits it to one cycle every six hours, so a fault a power cycle cannot fix
   does not reboot the TV over and over:

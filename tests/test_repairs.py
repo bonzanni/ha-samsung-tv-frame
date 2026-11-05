@@ -38,7 +38,7 @@ async def test_a_wedged_art_host_raises_a_repair_naming_the_remedy(
     hass, mock_device
 ):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
 
     issue = _issue(hass, entry)
@@ -50,7 +50,7 @@ async def test_a_wedged_art_host_raises_a_repair_naming_the_remedy(
 
 async def test_no_repair_while_the_art_host_is_present(hass, mock_device):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = False
+    mock_device.art_host_fault = False
     entry = await _setup(hass, mock_device)
 
     assert _issue(hass, entry) is None
@@ -59,7 +59,7 @@ async def test_no_repair_while_the_art_host_is_present(hass, mock_device):
 async def test_no_repair_for_a_tv_we_simply_cannot_reach(hass, mock_device):
     """An unreachable TV is not a repair — the owner has nothing to fix."""
     mock_device.async_device_info.return_value = None
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
 
     assert _issue(hass, entry) is None
@@ -67,11 +67,11 @@ async def test_no_repair_for_a_tv_we_simply_cannot_reach(hass, mock_device):
 
 async def test_the_repair_clears_when_the_art_host_comes_back(hass, mock_device):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
     assert _issue(hass, entry) is not None
 
-    mock_device.art_host_unavailable = False
+    mock_device.art_host_fault = False
     coordinator = entry.runtime_data
     await coordinator.async_refresh()
     await hass.async_block_till_done()
@@ -86,7 +86,7 @@ async def test_unloading_the_entry_clears_a_raised_repair(hass, mock_device):
     be permanent and unactionable.
     """
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
     assert _issue(hass, entry) is not None
 
@@ -111,7 +111,7 @@ async def test_a_stale_issue_is_reconciled_on_the_first_poll(hass, mock_device):
         translation_key="art_service_unavailable",
     )
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = False
+    mock_device.art_host_fault = False
     entry = await _setup(hass, mock_device)
 
     registry = ir.async_get(hass)
@@ -126,7 +126,7 @@ async def test_a_stale_issue_is_reconciled_on_the_first_poll(hass, mock_device):
 async def test_a_failed_setup_does_not_orphan_a_repair(hass, mock_device):
     """A repair with no coordinator behind it can never be cleared."""
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -164,7 +164,7 @@ async def test_the_fault_is_poll_owned_and_an_art_push_cannot_move_it(
     not notice.
     """
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
     coordinator = entry.runtime_data
     assert coordinator.data.art_service_unavailable is True
@@ -186,12 +186,12 @@ async def test_the_fault_is_poll_owned_and_an_art_push_cannot_move_it(
 
 async def test_one_poll_clears_it_once_the_host_is_back(hass, mock_device):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
     coordinator = entry.runtime_data
     assert coordinator.data.art_service_unavailable is True
 
-    mock_device.art_host_unavailable = False
+    mock_device.art_host_fault = False
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
@@ -204,7 +204,7 @@ async def test_a_failed_poll_is_not_marked_successful_by_this_change(
 ):
     """Nothing in this feature may touch `last_update_success`."""
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     entry = await _setup(hass, mock_device)
     coordinator = entry.runtime_data
 
@@ -214,3 +214,35 @@ async def test_a_failed_poll_is_not_marked_successful_by_this_change(
         await hass.async_block_till_done()
 
     assert coordinator.last_update_success is False
+
+
+async def test_a_standby_wake_on_a_learned_model_is_not_reported(
+    hass, mock_device
+):
+    """#29: the session does not ask a screen-dark standby TV, so a fault it
+    remembers from an earlier session is not news."""
+    mock_device.async_device_info.return_value = {"PowerState": "on"}
+    entry = await _setup(hass, mock_device)
+    coordinator = entry.runtime_data
+    coordinator._art_implies_power_on = True
+
+    mock_device.art_host_fault = True
+    mock_device.async_device_info.return_value = {"PowerState": "standby"}
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.art_service_unavailable is False
+    assert _issue(hass, entry) is None
+
+
+async def test_standby_counts_on_a_model_that_shows_art_in_standby(
+    hass, mock_device
+):
+    """2025 Frames report "standby" in normal art mode and are still asked."""
+    mock_device.async_device_info.return_value = {"PowerState": "standby"}
+    mock_device.art_host_fault = True
+    entry = await _setup(hass, mock_device)
+
+    assert entry.runtime_data._art_implies_power_on is False
+    assert entry.runtime_data.data.art_service_unavailable is True
+    assert _issue(hass, entry) is not None

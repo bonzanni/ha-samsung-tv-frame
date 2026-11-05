@@ -83,7 +83,7 @@ async def test_art_service_sensor_reports_a_wedged_art_host(hass, mock_device):
     observable and automatable rather than merely logged.
     """
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     await _setup(hass, mock_device)
 
     state = hass.states.get("binary_sensor.samsung_frame_tv_art_service")
@@ -96,7 +96,7 @@ async def test_art_service_sensor_is_off_when_the_art_host_is_present(
     hass, mock_device
 ):
     mock_device.async_device_info.return_value = {"PowerState": "on"}
-    mock_device.art_host_unavailable = False
+    mock_device.art_host_fault = False
     await _setup(hass, mock_device)
 
     state = hass.states.get("binary_sensor.samsung_frame_tv_art_service")
@@ -113,7 +113,7 @@ async def test_art_service_sensor_is_off_when_the_tv_is_unreachable(
     every time the TV is simply switched off.
     """
     mock_device.async_device_info.return_value = None
-    mock_device.art_host_unavailable = True
+    mock_device.art_host_fault = True
     await _setup(hass, mock_device)
 
     state = hass.states.get("binary_sensor.samsung_frame_tv_art_service")

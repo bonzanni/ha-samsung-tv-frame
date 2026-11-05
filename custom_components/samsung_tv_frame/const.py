@@ -92,6 +92,11 @@ REMOTE_CANCEL_DEADLINE = 2
 ART_RETRY_DELAYS = (30.0, 60.0, 120.0, 300.0)
 ART_HOST_RETRY_DELAYS = (60.0, 120.0, 300.0)
 ART_DORMANT_SECONDS = 900.0
+# Consecutive hostless Art answers that make a wedge: the session goes dormant,
+# and the Art service is reported as a problem. Three answers span about three
+# minutes of retries, so a booting TV, which answers hostless until its art app
+# registers (84 s measured on a 2022 Frame), is never reported (#29).
+ART_HOST_FAULT_ANSWERS = 3
 ART_RETRY_JITTER = 0.20
 ART_RECONCILE_SECONDS = 300.0
 PAIRING_DEADLINE = 30

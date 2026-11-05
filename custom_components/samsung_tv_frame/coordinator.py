@@ -315,17 +315,22 @@ class FrameCoordinator(DataUpdateCoordinator[FrameData]):
         published_slideshow = (
             self._slideshow if optional_fresh and not is_off else None
         )
-        # A wedged Art host only means something while we can see the TV: an
-        # unreachable TV fails Art for the ordinary reason, and reporting a
-        # problem there would fire the owner's recovery automation every time
-        # the TV is switched off.
-        self._update_art_service_repair(reachable and self.device.art_host_unavailable)
+        # A wedged Art host only means something while we can see the TV and
+        # the Art session is asking it: an unreachable TV fails Art for the
+        # ordinary reason (reporting it would fire the owner's recovery
+        # automation at every switch-off), and a screen-dark standby wake is
+        # not asked at all. The fault itself needs repeated fresh hostless
+        # answers, so a booting TV is not reported (#29).
+        art_service_unavailable = (
+            reachable
+            and session_power_state in {"on", "standby"}
+            and self.device.art_host_fault
+        )
+        self._update_art_service_repair(art_service_unavailable)
 
         return FrameData(
             reachable=reachable,
-            art_service_unavailable=(
-                reachable and self.device.art_host_unavailable
-            ),
+            art_service_unavailable=art_service_unavailable,
             power_state=power_state,
             art_mode=False if is_off else effective_art_mode,
             tv_mode=mode,
